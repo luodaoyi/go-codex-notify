@@ -169,10 +169,16 @@ jobs:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Update package version
+      - name: Update package version if needed
         shell: bash
         run: |
-          npm version --no-git-tag-version "${{ needs.prepare-release.outputs.npm_version }}"
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          TARGET_VERSION="${{ needs.prepare-release.outputs.npm_version }}"
+          if [[ "$CURRENT_VERSION" != "$TARGET_VERSION" ]]; then
+            npm version --no-git-tag-version "$TARGET_VERSION"
+          else
+            echo "package.json already at version $TARGET_VERSION"
+          fi
 
       - name: Publish to npm
         env:
