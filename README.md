@@ -9,6 +9,73 @@
 - 首推通过 `npx` 或 `npm` 直接使用
 - 只需要配置 Telegram Bot Token 和 Chat ID
 
+## 包与发布信息
+
+这个项目现在同时提供两种分发方式：
+
+### 1. npm 包
+
+- npm 包名：`go-codex-notify`
+- 当前命令名：`go-codex-notify`
+- 当前发布渠道：npm registry
+- npm 页面：`https://www.npmjs.com/package/go-codex-notify`
+- 适合场景：直接给 Codex `notify` 配置使用，或者本机全局安装
+
+常见命令：
+
+```bash
+npx -y go-codex-notify
+npm install -g go-codex-notify
+go-codex-notify
+```
+
+### 2. GitHub Releases 二进制
+
+如果你不想依赖 npm，也可以直接下载 GitHub Release 里的预编译二进制。
+
+- GitHub 仓库：`https://github.com/luodaoyi/go-codex-notify`
+- Releases 页面：`https://github.com/luodaoyi/go-codex-notify/releases`
+
+当前会发布这些平台的二进制：
+
+- Windows amd64
+- Windows arm64
+- Linux amd64
+- Linux arm64
+- macOS amd64
+- macOS arm64
+
+当前 release 产物命名规则：
+
+```text
+notify-telegram-windows-amd64.exe
+notify-telegram-windows-arm64.exe
+notify-telegram-linux-amd64
+notify-telegram-linux-arm64
+notify-telegram-darwin-amd64
+notify-telegram-darwin-arm64
+```
+
+每个 release 里还会同时附带对应的 `.sha256` 校验文件。
+
+### 3. npm 包和二进制的关系
+
+这个项目真正干活的是 Go 二进制。
+
+npm 包本身主要做三件事：
+
+1. 提供 `npx go-codex-notify` 和 `npm install -g go-codex-notify` 入口
+2. 根据当前系统自动识别平台和架构
+3. 自动下载对应 GitHub Release 的二进制并执行
+
+所以对普通用户来说，**最推荐的方式仍然是 `npx`**：
+
+- 不用自己挑平台
+- 不用手动下载 release 文件
+- 不用自己维护本地二进制路径
+
+---
+
 ## 推荐用法
 
 优先推荐 `npx`，因为最省事：不用自己下载二进制，也不用手动挑平台版本。
@@ -291,12 +358,18 @@ node bin/cli.js
 
 如果没有提供配置，会报错提示缺少 `TELEGRAM_BOT_TOKEN` 或 `TELEGRAM_CHAT_ID`。
 
-### 模拟 Codex 输入
+### 模拟 Codex 输入（可选）
 
-可以手工喂一个 JSON 测试：
+这个工具默认**不依赖 stdin**，直接执行时会：
+
+1. 读配置
+2. 发一个 Telegram POST
+3. 立刻退出
+
+如果你确实想模拟 Codex 传入的数据，也可以手工喂一个 JSON：
 
 ```bash
-echo '{"client":"codex-tui","task":"修复登录流程","status":"completed","message":"老板可以回来看看了"}' | go run .
+echo '{"client":"codex-tui","task":"修复登录流程","status":"completed","message":"可以回来看看了"}' | go run .
 ```
 
 ---

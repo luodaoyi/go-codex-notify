@@ -95,6 +95,14 @@ func loadConfigFile(path string) (Config, error) {
 }
 
 func readPayload() (NotifyPayload, string) {
+	stat, err := os.Stdin.Stat()
+	if err != nil {
+		return NotifyPayload{}, ""
+	}
+	if (stat.Mode() & os.ModeCharDevice) != 0 {
+		return NotifyPayload{}, ""
+	}
+
 	b, err := io.ReadAll(os.Stdin)
 	if err != nil || len(bytes.TrimSpace(b)) == 0 {
 		return NotifyPayload{}, ""

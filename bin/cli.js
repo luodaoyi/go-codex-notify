@@ -1,23 +1,16 @@
 #!/usr/bin/env node
 
 const { spawnSync } = require('node:child_process');
-const { existsSync, mkdirSync, chmodSync, createWriteStream, copyFileSync } = require('node:fs');
-const { homedir, platform, arch } = require('node:os');
-const { dirname, join } = require('node:path');
-const https = require('node:https');
+const { existsSync } = require('node:fs');
+const { join } = require('node:path');
 
-const pkg = require('../package.json');
-const BIN_DIR = join(__dirname, '..', '.bin');
-const EXECUTABLE = getExecutableName();
-const BINARY_PATH = join(BIN_DIR, EXECUTABLE);
+const ROOT = join(__dirname, '..');
+const GO_MAIN = join(ROOT, 'main.go');
+const HAS_LOCAL_SOURCE = existsSync(GO_MAIN);
 
-(async () => {
+(() => {
   try {
-    ensureBinary();
-    const result = spawnSync(BINARY_PATH, process.argv.slice(2), {
-      stdio: ['inherit', 'inherit', 'inherit'],
-      env: process.env,
-    });
+    const result = HAS_LOCAL_SOURCE ? runGoSource() : runBundledBinary();
     if (result.error) throw result.error;
     process.exit(result.status ?? 0);
   } catch (err) {
@@ -26,28 +19,31 @@ const BINARY_PATH = join(BIN_DIR, EXECUTABLE);
   }
 })();
 
-function ensureBinary() {
-  if (existsSync(BINARY_PATH)) return;
-  const cachePath = getCachePath();
-  if (existsSync(cachePath)) {
-    mkdirSync(dirname(BINARY_PATH), { recursive: true });
-    copyFileSync(cachePath, BINARY_PATH);
-    if (platform() !== 'win32') chmodSync(BINARY_PATH, 0o755);
-    return;
-  }
-  throw new Error(
-    `binary not found at ${BINARY_PATH}. Run postinstall or execute: node scripts/install.js`
-  );
+function runGoSource() {
+  return spawnSync('go', ['run', '.'], {
+    cwd: ROOT,
+    stdio: ['ignore', 'inherit', 'inherit'],
+    env: process.env,
+  });
 }
 
-function getExecutableName() {
-  const mapping = getArtifactName();
-  return mapping;
+function runBundledBinary() {
+  const binaryPath = join(ROOT, '.bin', getArtifactName());
+  if (!existsSync(binaryPath)) {
+    throw new Error(
+      `binary not found at ${binaryPath}. Run postinstall or execute: node scripts/install.js`
+    );
+  }
+
+  return spawnSync(binaryPath, process.argv.slice(2), {
+    stdio: ['ignore', 'inherit', 'inherit'],
+    env: process.env,
+  });
 }
 
 function getArtifactName() {
-  const p = platform();
-  const a = arch();
+  const p = process.platform;
+  const a = process.arch;
   const map = {
     'win32:x64': 'notify-telegram-windows-amd64.exe',
     'win32:arm64': 'notify-telegram-windows-arm64.exe',
@@ -61,8 +57,4 @@ function getArtifactName() {
     throw new Error(`unsupported platform: ${key}`);
   }
   return map[key];
-}
-
-function getCachePath() {
-  return join(homedir(), '.codex', 'go-codex-notify', pkg.version, getArtifactName());
 }
