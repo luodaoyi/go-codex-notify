@@ -3,3 +3,4 @@ notify-telegram.exe
 notify-telegram-*
 dist/
 notify-telegram.json
+go-codex-notify

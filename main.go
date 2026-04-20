@@ -15,8 +15,10 @@ import (
 )
 
 type Config struct {
-	BotToken string `json:"bot_token"`
-	ChatID   string `json:"chat_id"`
+	BotToken         string `json:"bot_token"`
+	ChatID           string `json:"chat_id"`
+	OpeniLinkHubURL   string `json:"openilink_hub_url"`
+	OpeniLinkHubToken string `json:"openilink_hub_token"`
 }
 
 type NotifyPayload struct {
@@ -33,6 +35,10 @@ type TelegramRequest struct {
 	Text   string `json:"text"`
 }
 
+type OpeniLinkRequest struct {
+	Content string `json:"content"`
+}
+
 func main() {
 	cfg, err := loadConfig()
 	if err != nil {
@@ -41,8 +47,8 @@ func main() {
 
 	payload, rawInput := readPayload()
 	msg := buildMessage(payload, rawInput)
-	if err := sendTelegram(cfg, msg); err != nil {
-		fatalf("send telegram failed: %v", err)
+	if err := sendNotifications(cfg, msg); err != nil {
+		fatalf("send notification failed: %v", err)
 	}
 
 	fmt.Println("ok")
@@ -50,8 +56,10 @@ func main() {
 
 func loadConfig() (Config, error) {
 	cfg := Config{
-		BotToken: strings.TrimSpace(os.Getenv("TELEGRAM_BOT_TOKEN")),
-		ChatID:   strings.TrimSpace(os.Getenv("TELEGRAM_CHAT_ID")),
+		BotToken:          strings.TrimSpace(os.Getenv("TELEGRAM_BOT_TOKEN")),
+		ChatID:            strings.TrimSpace(os.Getenv("TELEGRAM_CHAT_ID")),
+		OpeniLinkHubURL:   strings.TrimSpace(os.Getenv("OPENILINK_HUB_URL")),
+		OpeniLinkHubToken: strings.TrimSpace(os.Getenv("OPENILINK_HUB_TOKEN")),
 	}
 
 	configPath := strings.TrimSpace(os.Getenv("CODEX_NOTIFY_CONFIG"))
@@ -70,13 +78,30 @@ func loadConfig() (Config, error) {
 			if cfg.ChatID == "" {
 				cfg.ChatID = strings.TrimSpace(fileCfg.ChatID)
 			}
+			if cfg.OpeniLinkHubURL == "" {
+				cfg.OpeniLinkHubURL = strings.TrimSpace(fileCfg.OpeniLinkHubURL)
+			}
+			if cfg.OpeniLinkHubToken == "" {
+				cfg.OpeniLinkHubToken = strings.TrimSpace(fileCfg.OpeniLinkHubToken)
+			}
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return Config{}, fmt.Errorf("read config file %s: %w", configPath, err)
 		}
 	}
 
-	if cfg.BotToken == "" || cfg.ChatID == "" {
-		return Config{}, errors.New("missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID (env or config file)")
+	telegramConfigured := cfg.BotToken != "" && cfg.ChatID != ""
+	openiLinkConfigured := cfg.OpeniLinkHubURL != "" && cfg.OpeniLinkHubToken != ""
+
+	if !telegramConfigured && !openiLinkConfigured {
+		return Config{}, errors.New("no notification channel configured; set Telegram and/or OpeniLink Hub via env or config file")
+	}
+
+	if (cfg.BotToken == "") != (cfg.ChatID == "") {
+		return Config{}, errors.New("telegram config incomplete; TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must be set together")
+	}
+
+	if (cfg.OpeniLinkHubURL == "") != (cfg.OpeniLinkHubToken == "") {
+		return Config{}, errors.New("openilink hub config incomplete; OPENILINK_HUB_URL and OPENILINK_HUB_TOKEN must be set together")
 	}
 
 	return cfg, nil
@@ -233,6 +258,53 @@ func sendTelegram(cfg Config, text string) error {
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("telegram api %s: %s", resp.Status, strings.TrimSpace(string(respBody)))
+	}
+	return nil
+}
+
+func sendOpeniLinkHub(cfg Config, text string) error {
+	body, err := json.Marshal(OpeniLinkRequest{Content: text})
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, cfg.OpeniLinkHubURL, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+cfg.OpeniLinkHubToken)
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("openilink hub api %s: %s", resp.Status, strings.TrimSpace(string(respBody)))
+	}
+	return nil
+}
+
+func sendNotifications(cfg Config, text string) error {
+	var errs []string
+
+	if cfg.BotToken != "" && cfg.ChatID != "" {
+		if err := sendTelegram(cfg, text); err != nil {
+			errs = append(errs, "telegram: "+err.Error())
+		}
+	}
+
+	if cfg.OpeniLinkHubURL != "" && cfg.OpeniLinkHubToken != "" {
+		if err := sendOpeniLinkHub(cfg, text); err != nil {
+			errs = append(errs, "openilink hub: "+err.Error())
+		}
+	}
+
+	if len(errs) > 0 {
+		return errors.New(strings.Join(errs, "; "))
 	}
 	return nil
 }

@@ -4,10 +4,10 @@
 
 它的目标很简单：
 
-- Codex 任务完成后，自动给 Telegram 发一条消息
+- Codex 任务完成后，自动给 Telegram 或 OpeniLink Hub 推送一条消息
 - 不走 PowerShell，不踩编码和转义坑
 - 首推通过 `npx` 或 `npm` 直接使用
-- 只需要配置 Telegram Bot Token 和 Chat ID
+- 哪个通道配置了就推哪个；两个都配置就双推
 
 ## 包与发布信息
 
@@ -129,20 +129,49 @@ go-codex-notify
 1. 环境变量
 2. 配置文件
 
+支持两条通知通道：
+
+- Telegram
+- OpeniLink Hub
+
+规则很简单：
+
+- 不配置就不推送
+- 配置了就推送
+- Telegram 和 OpeniLink Hub 都配置了，就两个都推送
+- 不需要额外指定“本次到底推哪一个”
+
 ### 方式一：环境变量
 
-程序需要两个环境变量：
+#### Telegram
+
+如果你要推 Telegram，需要这两个环境变量：
 
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
 
-只要这两个值能被程序读到，`npx`、全局安装后的 `go-codex-notify`、以及手动下载的二进制，配置方式都是一样的。
+#### OpeniLink Hub
+
+如果你要推 OpeniLink Hub，需要这两个环境变量：
+
+- `OPENILINK_HUB_URL`
+- `OPENILINK_HUB_TOKEN`
+
+其中 `OPENILINK_HUB_URL` 就是你 Hub 的发送接口，例如：
+
+```text
+https://hub.011f.com/bot/v1/message/send
+```
+
+只要这些值能被程序读到，`npx`、全局安装后的 `go-codex-notify`、以及手动下载的二进制，配置方式都是一样的。
 
 #### Windows PowerShell 临时设置
 
 ```powershell
 $env:TELEGRAM_BOT_TOKEN="123456789:xxxxxx"
 $env:TELEGRAM_CHAT_ID="123456789"
+$env:OPENILINK_HUB_URL="https://hub.011f.com/bot/v1/message/send"
+$env:OPENILINK_HUB_TOKEN="app_xxxxxxxxxxxxxxxxxxxx"
 ```
 
 #### Windows 永久设置
@@ -150,6 +179,8 @@ $env:TELEGRAM_CHAT_ID="123456789"
 ```powershell
 setx TELEGRAM_BOT_TOKEN "123456789:xxxxxx"
 setx TELEGRAM_CHAT_ID "123456789"
+setx OPENILINK_HUB_URL "https://hub.011f.com/bot/v1/message/send"
+setx OPENILINK_HUB_TOKEN "app_xxxxxxxxxxxxxxxxxxxx"
 ```
 
 设置完成后，重新打开终端。
@@ -159,15 +190,19 @@ setx TELEGRAM_CHAT_ID "123456789"
 ```bash
 export TELEGRAM_BOT_TOKEN="123456789:xxxxxx"
 export TELEGRAM_CHAT_ID="123456789"
+export OPENILINK_HUB_URL="https://hub.011f.com/bot/v1/message/send"
+export OPENILINK_HUB_TOKEN="app_xxxxxxxxxxxxxxxxxxxx"
 ```
 
 #### macOS / Linux（bash / zsh）永久设置
 
-把下面两行追加到 `~/.bashrc`、`~/.zshrc` 或你当前 shell 的配置文件里：
+把下面几行追加到 `~/.bashrc`、`~/.zshrc` 或你当前 shell 的配置文件里：
 
 ```bash
 export TELEGRAM_BOT_TOKEN="123456789:xxxxxx"
 export TELEGRAM_CHAT_ID="123456789"
+export OPENILINK_HUB_URL="https://hub.011f.com/bot/v1/message/send"
+export OPENILINK_HUB_TOKEN="app_xxxxxxxxxxxxxxxxxxxx"
 ```
 
 保存后执行：
@@ -195,7 +230,9 @@ source ~/.zshrc
 ```json
 {
   "bot_token": "123456789:xxxxxx",
-  "chat_id": "123456789"
+  "chat_id": "123456789",
+  "openilink_hub_url": "https://hub.011f.com/bot/v1/message/send",
+  "openilink_hub_token": "app_xxxxxxxxxxxxxxxxxxxx"
 }
 ```
 
@@ -208,6 +245,24 @@ source ~/.zshrc
 ```powershell
 $env:CODEX_NOTIFY_CONFIG = "C:\Users\tb16p\.codex\notify-telegram.json"
 ```
+
+### OpeniLink Hub 请求示例
+
+如果你想单独理解 OpeniLink Hub 这条通知链，最小请求就像这样：
+
+```bash
+curl -X POST https://hub.011f.com/bot/v1/message/send \
+  -H "Authorization: Bearer app_xxxxxxxxxxxxxxxxxxxx" \
+  -H "Content-Type: application/json" \
+  -d '{"content":"hello"}'
+```
+
+在 `go-codex-notify` 里，你不需要自己再拼这个 curl。只要把：
+
+- `OPENILINK_HUB_URL`
+- `OPENILINK_HUB_TOKEN`
+
+配好，程序就会自动帮你发。
 
 ---
 
