@@ -1,65 +1,62 @@
 # go-codex-notify
 
-一个给 OpenAI Codex `notify` 配置用的 Telegram 通知程序。
+一个给 OpenAI Codex `notify` 使用的 Telegram 通知程序。
 
-它适合这样的场景：
+它的目标很简单：
 
-- Codex 任务完成后自动提醒
-- 不想再走 PowerShell 编码和转义坑
-- 想直接执行一个 Go 编译出来的单文件程序
-- 想把 Telegram Bot Token / Chat ID 放到环境变量或配置文件里，而不是写死在代码里
+- Codex 任务完成后，自动给 Telegram 发一条消息
+- 不走 PowerShell，不踩编码和转义坑
+- 只需要配置 Telegram Bot Token 和 Chat ID
 
 ## 功能
 
-- 直接作为 Codex `notify` 外部命令执行
-- 自动读取当前工作目录
-- 自动附带：
-  - 当前目录名
-  - 当前完整路径
-  - 主机名
-  - 当前时间
-  - Git 根目录
-  - Git 分支
-  - 最近一次 commit
-  - 工作区是否有未提交改动
-- 尝试从标准输入读取 Codex 传入的 payload
-- Telegram 配置支持：
-  - 环境变量
-  - JSON 配置文件
+程序会自动收集并发送这些信息：
+
+- 当前时间
+- 当前机器名
+- 当前目录名
+- 当前完整路径
+- Git 根目录
+- Git 分支
+- 最近一次 commit
+- 工作区是否有未提交改动
+- 如果 Codex 通过标准输入传入了通知 payload，也会尽量带上其中的信息
 
 ## 配置方式
 
-程序按这个优先级读取配置：
+程序按下面的优先级读取配置：
 
 1. 环境变量
 2. 配置文件
 
-### 方式一：环境变量
+---
 
-设置两个环境变量：
+## 方式一：环境变量
+
+需要两个环境变量：
 
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
 
-#### PowerShell 临时设置
+### PowerShell 临时设置
 
 ```powershell
 $env:TELEGRAM_BOT_TOKEN = "123456789:xxxxxx"
 $env:TELEGRAM_CHAT_ID = "123456789"
 ```
 
-#### Windows 永久设置
+### Windows 永久设置
 
 ```powershell
 setx TELEGRAM_BOT_TOKEN "123456789:xxxxxx"
 setx TELEGRAM_CHAT_ID "123456789"
 ```
 
-设置后重新打开终端。
+设置完成后，重新打开终端。
 
 ---
 
-### 方式二：配置文件
+## 方式二：配置文件
 
 默认配置文件路径：
 
@@ -67,7 +64,7 @@ setx TELEGRAM_CHAT_ID "123456789"
 %USERPROFILE%\.codex\notify-telegram.json
 ```
 
-示例：
+示例内容：
 
 ```json
 {
@@ -76,35 +73,97 @@ setx TELEGRAM_CHAT_ID "123456789"
 }
 ```
 
-如果想改路径，可以设置环境变量：
+如果你想使用其他路径，可以设置环境变量：
 
 - `CODEX_NOTIFY_CONFIG`
 
 例如：
 
 ```powershell
-$env:CODEX_NOTIFY_CONFIG = "C:\\Users\\tb16p\\.codex\\notify-telegram.json"
+$env:CODEX_NOTIFY_CONFIG = "C:\Users\tb16p\.codex\notify-telegram.json"
 ```
 
-## Codex 配置
+---
 
-把编译后的程序放到例如：
+## 如何获取 Telegram Bot Token
+
+1. 在 Telegram 里找到 **@BotFather**
+2. 发送 `/newbot`
+3. 按提示创建 bot
+4. 创建完成后，BotFather 会返回一串 token
+
+形如：
 
 ```text
-C:\Users\tb16p\.codex\notify-telegram.exe
+123456789:AAxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
-然后在 `~/.codex/config.toml` 里写：
+这就是 `TELEGRAM_BOT_TOKEN`。
 
-```toml
-notify = ["C:\\Users\\tb16p\\.codex\\notify-telegram.exe"]
+---
+
+## 如何获取 Telegram Chat ID
+
+### 私聊
+
+1. 先给你的 bot 发一条消息
+2. 打开：
+
+```text
+https://api.telegram.org/bot<你的BotToken>/getUpdates
 ```
 
-这是最推荐的方式：
+3. 在返回 JSON 里找到：
 
-- 不走 PowerShell
-- 不需要额外转义 Telegram 文本
-- 不需要传 Bot Token / Chat ID 参数
+- `message.chat.id`
+
+这就是你的私聊 Chat ID。
+
+### 群组
+
+1. 把 bot 拉进群
+2. 在群里发一条消息
+3. 再打开：
+
+```text
+https://api.telegram.org/bot<你的BotToken>/getUpdates
+```
+
+4. 找到：
+
+- `message.chat.id`
+
+群组 ID 通常长这样：
+
+```text
+-100xxxxxxxxxx
+```
+
+---
+
+## 编译
+
+### 本机直接编译
+
+```bash
+go build -o notify-telegram .
+```
+
+### 编译 Windows 版本
+
+```bash
+GOOS=windows GOARCH=amd64 go build -o notify-telegram.exe .
+```
+
+如果你是在 Windows 上直接编译，通常直接运行：
+
+```powershell
+go build -o notify-telegram.exe .
+```
+
+就够了。
+
+---
 
 ## 本地运行
 
@@ -114,126 +173,55 @@ notify = ["C:\\Users\\tb16p\\.codex\\notify-telegram.exe"]
 go run .
 ```
 
+或者运行编译后的二进制：
+
+```bash
+./notify-telegram
+```
+
+Windows：
+
+```powershell
+.\notify-telegram.exe
+```
+
 如果没有提供配置，会报错提示缺少 `TELEGRAM_BOT_TOKEN` 或 `TELEGRAM_CHAT_ID`。
 
-### 模拟 Codex payload
+### 模拟 Codex 输入
 
-可以手工往标准输入喂 JSON：
+可以手工喂一个 JSON 测试：
 
 ```bash
 echo '{"client":"codex-tui","task":"修复登录流程","status":"completed","message":"老板可以回来看看了"}' | go run .
 ```
 
-## 编译
+---
 
-### 本机编译
+## Codex 配置
 
-```bash
-go build -o notify-telegram .
-```
-
-### Windows
-
-```bash
-GOOS=windows GOARCH=amd64 go build -o notify-telegram-windows-amd64.exe .
-```
-
-### macOS Apple Silicon
-
-```bash
-GOOS=darwin GOARCH=arm64 go build -o notify-telegram-darwin-arm64 .
-```
-
-### Linux amd64
-
-```bash
-GOOS=linux GOARCH=amd64 go build -o notify-telegram-linux-amd64 .
-```
-
-## GitHub Actions
-
-仓库已经附带多平台构建工作流，会在以下场景触发：
-
-- push 到 `main`
-- pull request
-- 手动触发 `workflow_dispatch`
-- 发布 tag（`v*`）时自动构建 release asset
-
-构建目标：
-
-- Windows amd64
-- Windows arm64
-- Linux amd64
-- Linux arm64
-- macOS amd64
-- macOS arm64
-
-### 自动 Release（两种方式）
-
-#### 方式一：直接 push tag
-
-只要推送形如 `v*` 的 tag，例如：
-
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-现有 `ci.yml` 会自动：
-
-- 构建多平台二进制
-- 上传 Actions artifacts
-- 创建 GitHub Release
-- 把构建产物作为 release assets 附到该 tag
-
-#### 方式二：在 Actions 页面点按钮手动发布
-
-仓库还提供了一个单独的 `release` workflow，会在 GitHub Actions 页面显示 `Run workflow` 按钮。
-
-使用方式：
-
-1. 打开 GitHub 仓库的 **Actions** 页面
-2. 选择 **release** workflow
-3. 点击 **Run workflow**
-4. 输入版本号，例如：`v1.0.0`
-
-这个 workflow 会自动：
-
-- 校验版本号格式
-- 创建并推送 tag
-- 创建 GitHub Release
-
-随后 `ci.yml` 会因为 tag 被推送而继续自动构建多平台二进制并上传为 release assets。
-
-## Telegram Chat ID 获取方法
-
-### 私聊
-
-先给你的 bot 发一条消息，然后访问：
+假设你把编译后的程序放到：
 
 ```text
-https://api.telegram.org/bot<你的BotToken>/getUpdates
+C:\Users\tb16p\.codex\notify-telegram.exe
 ```
 
-找到返回 JSON 里的：
+那么 `~/.codex/config.toml` 里这样写：
 
-- `message.chat.id`
-
-### 群组
-
-把 bot 拉进群里，在群里发一条消息，然后再看：
-
-- `message.chat.id`
-
-群通常类似：
-
-```text
--100xxxxxxxxxx
+```toml
+notify = ["C:\\Users\\tb16p\\.codex\\notify-telegram.exe"]
 ```
 
-## 输出内容示例
+这是推荐方式：
 
-程序发送到 Telegram 的消息大概会长这样：
+- 不走 PowerShell
+- 不需要给 `notify` 传复杂参数
+- Telegram Bot Token 和 Chat ID 通过环境变量或配置文件注入
+
+---
+
+## 消息示例
+
+程序发到 Telegram 的消息大概像这样：
 
 ```text
 老板，Codex 任务已完成。
@@ -252,22 +240,10 @@ Git 分支：main
 工作区状态：有未提交改动
 ```
 
-## 开发
+---
 
-### 运行测试
-
-当前项目没有额外单元测试，先执行：
+## 开发时测试
 
 ```bash
 go test ./...
 ```
-
-### 格式化
-
-```bash
-gofmt -w .
-```
-
-## 许可证
-
-MIT
