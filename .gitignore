@@ -1,0 +1,5 @@
+notify-telegram
+notify-telegram.exe
+notify-telegram-*
+dist/
+notify-telegram.json
