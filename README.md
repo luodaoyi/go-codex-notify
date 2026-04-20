@@ -168,6 +168,43 @@ GOOS=linux GOARCH=amd64 go build -o notify-telegram-linux-amd64 .
 - macOS amd64
 - macOS arm64
 
+### 自动 Release（两种方式）
+
+#### 方式一：直接 push tag
+
+只要推送形如 `v*` 的 tag，例如：
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+现有 `ci.yml` 会自动：
+
+- 构建多平台二进制
+- 上传 Actions artifacts
+- 创建 GitHub Release
+- 把构建产物作为 release assets 附到该 tag
+
+#### 方式二：在 Actions 页面点按钮手动发布
+
+仓库还提供了一个单独的 `release` workflow，会在 GitHub Actions 页面显示 `Run workflow` 按钮。
+
+使用方式：
+
+1. 打开 GitHub 仓库的 **Actions** 页面
+2. 选择 **release** workflow
+3. 点击 **Run workflow**
+4. 输入版本号，例如：`v1.0.0`
+
+这个 workflow 会自动：
+
+- 校验版本号格式
+- 创建并推送 tag
+- 创建 GitHub Release
+
+随后 `ci.yml` 会因为 tag 被推送而继续自动构建多平台二进制并上传为 release assets。
+
 ## Telegram Chat ID 获取方法
 
 ### 私聊
