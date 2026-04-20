@@ -6,20 +6,22 @@
 
 - Codex 任务完成后，自动给 Telegram 发一条消息
 - 不走 PowerShell，不踩编码和转义坑
-- 可以直接通过 `npx` 使用
+- 首推通过 `npx` 或 `npm` 直接使用
 - 只需要配置 Telegram Bot Token 和 Chat ID
 
 ## 推荐用法
 
-### 方式一：直接用 npx
+优先推荐 `npx`，因为最省事：不用自己下载二进制，也不用手动挑平台版本。
+
+### 方式一：直接用 npx（首推）
 
 ```bash
-npx go-codex-notify
+npx -y go-codex-notify
 ```
 
 第一次运行时会自动下载当前平台对应的二进制，然后执行。
 
-### 方式二：先全局安装
+### 方式二：先全局安装 npm 包
 
 ```bash
 npm install -g go-codex-notify
@@ -30,6 +32,10 @@ npm install -g go-codex-notify
 ```bash
 go-codex-notify
 ```
+
+### 方式三：手动下载二进制（备选）
+
+如果你不想走 `npx` / `npm`，也可以去 GitHub Releases 手动下载对应平台的二进制再运行。
 
 ---
 
@@ -58,16 +64,18 @@ go-codex-notify
 
 ### 方式一：环境变量
 
-需要两个环境变量：
+程序需要两个环境变量：
 
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
 
-#### PowerShell 临时设置
+只要这两个值能被程序读到，`npx`、全局安装后的 `go-codex-notify`、以及手动下载的二进制，配置方式都是一样的。
+
+#### Windows PowerShell 临时设置
 
 ```powershell
-$env:TELEGRAM_BOT_TOKEN = "123456789:xxxxxx"
-$env:TELEGRAM_CHAT_ID = "123456789"
+$env:TELEGRAM_BOT_TOKEN="123456789:xxxxxx"
+$env:TELEGRAM_CHAT_ID="123456789"
 ```
 
 #### Windows 永久设置
@@ -78,6 +86,34 @@ setx TELEGRAM_CHAT_ID "123456789"
 ```
 
 设置完成后，重新打开终端。
+
+#### macOS / Linux（bash / zsh）临时设置
+
+```bash
+export TELEGRAM_BOT_TOKEN="123456789:xxxxxx"
+export TELEGRAM_CHAT_ID="123456789"
+```
+
+#### macOS / Linux（bash / zsh）永久设置
+
+把下面两行追加到 `~/.bashrc`、`~/.zshrc` 或你当前 shell 的配置文件里：
+
+```bash
+export TELEGRAM_BOT_TOKEN="123456789:xxxxxx"
+export TELEGRAM_CHAT_ID="123456789"
+```
+
+保存后执行：
+
+```bash
+source ~/.bashrc
+```
+
+如果你用的是 zsh，就改成：
+
+```bash
+source ~/.zshrc
+```
 
 ### 方式二：配置文件
 
@@ -129,7 +165,7 @@ $env:CODEX_NOTIFY_CONFIG = "C:\Users\tb16p\.codex\notify-telegram.json"
 
 ### 私聊
 
-1. 先给你的 bot 发一条消息
+1. 先给你的 bot 发一条消息，至少发一次 `/start` 或任意文本
 2. 打开：
 
 ```text
@@ -140,12 +176,16 @@ https://api.telegram.org/bot<你的BotToken>/getUpdates
 
 - `message.chat.id`
 
-这就是你的私聊 Chat ID。
+这就是你的私聊 Chat ID，通常是纯数字，像这样：
+
+```text
+123456789
+```
 
 ### 群组
 
 1. 把 bot 拉进群
-2. 在群里发一条消息
+2. 在群里发一条消息，或者 @ 一下 bot
 3. 再打开：
 
 ```text
@@ -162,11 +202,18 @@ https://api.telegram.org/bot<你的BotToken>/getUpdates
 -100xxxxxxxxxx
 ```
 
+### 常见注意事项
+
+- 如果 `getUpdates` 是空数组，通常是因为你还没给 bot 发过消息
+- 如果是群组，bot 进群后最好先发一条消息再查
+- `chat.id` 和 bot 用户 ID 不是一回事，不要填错
+- 群组场景里，`TELEGRAM_CHAT_ID` 一般是负数，别把前面的 `-100` 丢了
+
 ---
 
 ## Codex 配置
 
-### 直接用 npx（推荐）
+### 直接用 npx（首推）
 
 在 `~/.codex/config.toml` 里写：
 
@@ -174,15 +221,24 @@ https://api.telegram.org/bot<你的BotToken>/getUpdates
 notify = ["npx", "-y", "go-codex-notify"]
 ```
 
-### 如果你已经全局安装
+这是最推荐的方式：配置最简单，不需要自己管理二进制文件。
+
+### 如果你已经全局安装了 npm 包
 
 ```toml
 notify = ["go-codex-notify"]
 ```
 
----
+### 如果你坚持手动下载二进制
 
-## 本地开发编译
+把可执行文件放到你自己的固定路径，然后在 `config.toml` 里写它的完整路径。
+
+## 手动二进制 / 开发者用法
+
+下面这些内容主要给两类人：
+
+- 你想自己编译
+- 你不想走 `npx` / `npm`，坚持手动使用二进制
 
 ### 本机直接编译
 
