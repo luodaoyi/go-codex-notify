@@ -6,7 +6,32 @@
 
 - Codex 任务完成后，自动给 Telegram 发一条消息
 - 不走 PowerShell，不踩编码和转义坑
+- 可以直接通过 `npx` 使用
 - 只需要配置 Telegram Bot Token 和 Chat ID
+
+## 推荐用法
+
+### 方式一：直接用 npx
+
+```bash
+npx go-codex-notify
+```
+
+第一次运行时会自动下载当前平台对应的二进制，然后执行。
+
+### 方式二：先全局安装
+
+```bash
+npm install -g go-codex-notify
+```
+
+安装后可直接运行：
+
+```bash
+go-codex-notify
+```
+
+---
 
 ## 功能
 
@@ -22,6 +47,8 @@
 - 工作区是否有未提交改动
 - 如果 Codex 通过标准输入传入了通知 payload，也会尽量带上其中的信息
 
+---
+
 ## 配置方式
 
 程序按下面的优先级读取配置：
@@ -29,23 +56,21 @@
 1. 环境变量
 2. 配置文件
 
----
-
-## 方式一：环境变量
+### 方式一：环境变量
 
 需要两个环境变量：
 
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
 
-### PowerShell 临时设置
+#### PowerShell 临时设置
 
 ```powershell
 $env:TELEGRAM_BOT_TOKEN = "123456789:xxxxxx"
 $env:TELEGRAM_CHAT_ID = "123456789"
 ```
 
-### Windows 永久设置
+#### Windows 永久设置
 
 ```powershell
 setx TELEGRAM_BOT_TOKEN "123456789:xxxxxx"
@@ -54,9 +79,7 @@ setx TELEGRAM_CHAT_ID "123456789"
 
 设置完成后，重新打开终端。
 
----
-
-## 方式二：配置文件
+### 方式二：配置文件
 
 默认配置文件路径：
 
@@ -141,7 +164,25 @@ https://api.telegram.org/bot<你的BotToken>/getUpdates
 
 ---
 
-## 编译
+## Codex 配置
+
+### 直接用 npx（推荐）
+
+在 `~/.codex/config.toml` 里写：
+
+```toml
+notify = ["npx", "-y", "go-codex-notify"]
+```
+
+### 如果你已经全局安装
+
+```toml
+notify = ["go-codex-notify"]
+```
+
+---
+
+## 本地开发编译
 
 ### 本机直接编译
 
@@ -167,13 +208,13 @@ go build -o notify-telegram.exe .
 
 ## 本地运行
 
-### 直接运行
+### 直接运行 Go 程序
 
 ```bash
 go run .
 ```
 
-或者运行编译后的二进制：
+### 运行编译后的二进制
 
 ```bash
 ./notify-telegram
@@ -185,6 +226,13 @@ Windows：
 .\notify-telegram.exe
 ```
 
+### 测试 npm 包入口
+
+```bash
+node scripts/install.js
+node bin/cli.js
+```
+
 如果没有提供配置，会报错提示缺少 `TELEGRAM_BOT_TOKEN` 或 `TELEGRAM_CHAT_ID`。
 
 ### 模拟 Codex 输入
@@ -194,28 +242,6 @@ Windows：
 ```bash
 echo '{"client":"codex-tui","task":"修复登录流程","status":"completed","message":"老板可以回来看看了"}' | go run .
 ```
-
----
-
-## Codex 配置
-
-假设你把编译后的程序放到：
-
-```text
-C:\Users\tb16p\.codex\notify-telegram.exe
-```
-
-那么 `~/.codex/config.toml` 里这样写：
-
-```toml
-notify = ["C:\\Users\\tb16p\\.codex\\notify-telegram.exe"]
-```
-
-这是推荐方式：
-
-- 不走 PowerShell
-- 不需要给 `notify` 传复杂参数
-- Telegram Bot Token 和 Chat ID 通过环境变量或配置文件注入
 
 ---
 
@@ -238,12 +264,4 @@ Git 根目录：C:\Users\tb16p\code\my-project
 Git 分支：main
 最近提交：a1b2c3 fix login callback
 工作区状态：有未提交改动
-```
-
----
-
-## 开发时测试
-
-```bash
-go test ./...
 ```
