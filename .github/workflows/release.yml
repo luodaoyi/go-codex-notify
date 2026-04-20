@@ -1,6 +1,9 @@
 name: release
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       version:
@@ -12,18 +15,27 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  prepare-release:
+    name: Prepare release
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Validate version
+      - name: Resolve version
+        id: version
         shell: bash
         run: |
-          VERSION="${{ inputs.version }}"
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME}"
+          fi
+
           if [[ -z "$VERSION" ]]; then
             echo "version is required"
             exit 1
@@ -33,26 +45,106 @@ jobs:
             echo "expected: vMAJOR.MINOR.PATCH"
             exit 1
           fi
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
 
-      - name: Check tag does not already exist
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push tag (workflow_dispatch only)
+        if: github.event_name == 'workflow_dispatch'
         shell: bash
         run: |
+          VERSION="${{ steps.version.outputs.version }}"
           git fetch --tags --force
           if git rev-parse "$VERSION" >/dev/null 2>&1; then
             echo "tag already exists: $VERSION"
             exit 1
           fi
-
-      - name: Create and push tag
-        shell: bash
-        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag "$VERSION"
           git push origin "$VERSION"
 
-      - name: Create GitHub release
+  build:
+    name: Build ${{ matrix.goos }}-${{ matrix.goarch }}
+    needs: prepare-release
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: windows
+            goarch: amd64
+            artifact: notify-telegram-windows-amd64.exe
+          - goos: windows
+            goarch: arm64
+            artifact: notify-telegram-windows-arm64.exe
+          - goos: linux
+            goarch: amd64
+            artifact: notify-telegram-linux-amd64
+          - goos: linux
+            goarch: arm64
+            artifact: notify-telegram-linux-arm64
+          - goos: darwin
+            goarch: amd64
+            artifact: notify-telegram-darwin-amd64
+          - goos: darwin
+            goarch: arm64
+            artifact: notify-telegram-darwin-arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare-release.outputs.version }}
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        shell: bash
+        run: |
+          mkdir -p dist
+          go build -trimpath -ldflags="-s -w" -o "dist/${{ matrix.artifact }}" .
+
+      - name: Generate SHA256 checksum
+        shell: bash
+        run: |
+          cd dist
+          sha256sum "${{ matrix.artifact }}" > "${{ matrix.artifact }}.sha256"
+
+      - name: Upload artifact bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            dist/${{ matrix.artifact }}
+            dist/${{ matrix.artifact }}.sha256
+
+  publish-release:
+    name: Publish release
+    needs: [prepare-release, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          find artifacts -type f -maxdepth 3 -print -exec cp {} release-assets/ \;
+          ls -lh release-assets/
+
+      - name: Create or update GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.VERSION }}
+          tag_name: ${{ needs.prepare-release.outputs.version }}
           generate_release_notes: true
-          prerelease: false
+          overwrite_files: true
+          files: release-assets/*
