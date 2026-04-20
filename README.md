@@ -1,191 +1,31 @@
 # go-codex-notify
 
-一个给 OpenAI Codex `notify` 使用的 Telegram 通知程序。
+`go-codex-notify` 是一个给 OpenAI Codex `notify` 使用的通知工具。
 
-它的目标很简单：
-
-- Codex 任务完成后，自动给 Telegram 或 OpeniLink Hub 推送一条消息
-- 不走 PowerShell，不踩编码和转义坑
-- 首推通过 `npx` 或 `npm` 直接使用
-- 哪个通道配置了就推哪个；两个都配置就双推
-
-## 包与发布信息
-
-这个项目现在同时提供两种分发方式：
-
-### 1. npm 包
-
-- npm 包名：`go-codex-notify`
-- 当前命令名：`go-codex-notify`
-- 当前发布渠道：npm registry
-- npm 页面：`https://www.npmjs.com/package/go-codex-notify`
-- 适合场景：直接给 Codex `notify` 配置使用，或者本机全局安装
-
-常见命令：
-
-```bash
-npx -y go-codex-notify
-npm install -g go-codex-notify
-go-codex-notify
-```
-
-### 2. GitHub Releases 二进制
-
-如果你不想依赖 npm，也可以直接下载 GitHub Release 里的预编译二进制。
-
-- GitHub 仓库：`https://github.com/luodaoyi/go-codex-notify`
-- Releases 页面：`https://github.com/luodaoyi/go-codex-notify/releases`
-
-当前会发布这些平台的二进制：
-
-- Windows amd64
-- Windows arm64
-- Linux amd64
-- Linux arm64
-- macOS amd64
-- macOS arm64
-
-当前 release 产物命名规则：
-
-```text
-notify-telegram-windows-amd64.exe
-notify-telegram-windows-arm64.exe
-notify-telegram-linux-amd64
-notify-telegram-linux-arm64
-notify-telegram-darwin-amd64
-notify-telegram-darwin-arm64
-```
-
-每个 release 里还会同时附带对应的 `.sha256` 校验文件。
-
-### 3. npm 包和二进制的关系
-
-这个项目真正干活的是 Go 二进制。
-
-npm 包本身主要做三件事：
-
-1. 提供 `npx go-codex-notify` 和 `npm install -g go-codex-notify` 入口
-2. 根据当前系统自动识别平台和架构
-3. 自动下载对应 GitHub Release 的二进制并执行
-
-所以对普通用户来说，**最推荐的方式仍然是 `npx`**：
-
-- 不用自己挑平台
-- 不用手动下载 release 文件
-- 不用自己维护本地二进制路径
-
----
-
-## 推荐用法
-
-优先推荐 `npx`，因为最省事：不用自己下载二进制，也不用手动挑平台版本。
-
-### 方式一：直接用 npx（首推）
-
-```bash
-npx -y go-codex-notify
-```
-
-第一次运行时会自动下载当前平台对应的二进制，然后执行。
-
-### 方式二：先全局安装 npm 包
-
-```bash
-npm install -g go-codex-notify
-```
-
-安装后可直接运行：
-
-```bash
-go-codex-notify
-```
-
-### 方式三：手动下载二进制（备选）
-
-如果你不想走 `npx` / `npm`，也可以去 GitHub Releases 手动下载对应平台的二进制再运行。
-
----
-
-## 功能
-
-程序会自动收集并发送这些信息：
-
-- 当前时间
-- 当前机器名
-- 当前目录名
-- 当前完整路径
-- Git 根目录
-- Git 分支
-- 最近一次 commit
-- 工作区是否有未提交改动
-- 如果 Codex 通过标准输入传入了通知 payload，也会尽量带上其中的信息
-
----
-
-## 配置方式
-
-程序按下面的优先级读取配置：
-
-1. 环境变量
-2. 配置文件
-
-支持两条通知通道：
+它会在 Codex 任务结束后自动推送一条消息，支持：
 
 - Telegram
 - OpeniLink Hub
 
-规则很简单：
+只要配置了对应通道就会推送；两个都配置就同时推送。
 
-- 不配置就不推送
-- 配置了就推送
-- Telegram 和 OpeniLink Hub 都配置了，就两个都推送
-- 不需要额外指定“本次到底推哪一个”
+## 用法
 
-### 方式一：环境变量
+### 安装
 
-#### Telegram
+推荐直接使用：
 
-如果你要推 Telegram，需要这两个环境变量：
-
-- `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_CHAT_ID`
-
-#### OpeniLink Hub
-
-如果你要推 OpeniLink Hub，需要这两个环境变量：
-
-- `OPENILINK_HUB_URL`
-- `OPENILINK_HUB_TOKEN`
-
-其中 `OPENILINK_HUB_URL` 就是你 Hub 的发送接口，例如：
-
-```text
-https://hub.011f.com/bot/v1/message/send
+```bash
+npx -y go-codex-notify
 ```
 
-只要这些值能被程序读到，`npx`、全局安装后的 `go-codex-notify`、以及手动下载的二进制，配置方式都是一样的。
+也可以全局安装：
 
-#### Windows PowerShell 临时设置
-
-```powershell
-$env:TELEGRAM_BOT_TOKEN="123456789:xxxxxx"
-$env:TELEGRAM_CHAT_ID="123456789"
-$env:OPENILINK_HUB_URL="https://hub.011f.com/bot/v1/message/send"
-$env:OPENILINK_HUB_TOKEN="app_xxxxxxxxxxxxxxxxxxxx"
+```bash
+npm install -g go-codex-notify
 ```
 
-#### Windows 永久设置
-
-```powershell
-setx TELEGRAM_BOT_TOKEN "123456789:xxxxxx"
-setx TELEGRAM_CHAT_ID "123456789"
-setx OPENILINK_HUB_URL "https://hub.011f.com/bot/v1/message/send"
-setx OPENILINK_HUB_TOKEN "app_xxxxxxxxxxxxxxxxxxxx"
-```
-
-设置完成后，重新打开终端。
-
-#### macOS / Linux（bash / zsh）临时设置
+### 配置环境变量
 
 ```bash
 export TELEGRAM_BOT_TOKEN="123456789:xxxxxx"
@@ -194,38 +34,15 @@ export OPENILINK_HUB_URL="https://hub.011f.com/bot/v1/message/send"
 export OPENILINK_HUB_TOKEN="app_xxxxxxxxxxxxxxxxxxxx"
 ```
 
-#### macOS / Linux（bash / zsh）永久设置
+### 或使用配置文件
 
-把下面几行追加到 `~/.bashrc`、`~/.zshrc` 或你当前 shell 的配置文件里：
-
-```bash
-export TELEGRAM_BOT_TOKEN="123456789:xxxxxx"
-export TELEGRAM_CHAT_ID="123456789"
-export OPENILINK_HUB_URL="https://hub.011f.com/bot/v1/message/send"
-export OPENILINK_HUB_TOKEN="app_xxxxxxxxxxxxxxxxxxxx"
-```
-
-保存后执行：
-
-```bash
-source ~/.bashrc
-```
-
-如果你用的是 zsh，就改成：
-
-```bash
-source ~/.zshrc
-```
-
-### 方式二：配置文件
-
-默认配置文件路径：
+默认路径：
 
 ```text
-%USERPROFILE%\.codex\notify-telegram.json
+~/.codex/notify-telegram.json
 ```
 
-示例内容：
+示例：
 
 ```json
 {
@@ -236,216 +53,20 @@ source ~/.zshrc
 }
 ```
 
-如果你想使用其他路径，可以设置环境变量：
-
-- `CODEX_NOTIFY_CONFIG`
-
-例如：
-
-```powershell
-$env:CODEX_NOTIFY_CONFIG = "C:\Users\tb16p\.codex\notify-telegram.json"
-```
-
-### OpeniLink Hub 请求示例
-
-如果你想单独理解 OpeniLink Hub 这条通知链，最小请求就像这样：
+也可以自定义路径：
 
 ```bash
-curl -X POST https://hub.011f.com/bot/v1/message/send \
-  -H "Authorization: Bearer app_xxxxxxxxxxxxxxxxxxxx" \
-  -H "Content-Type: application/json" \
-  -d '{"content":"hello"}'
+export CODEX_NOTIFY_CONFIG="/path/to/notify-telegram.json"
 ```
 
-在 `go-codex-notify` 里，你不需要自己再拼这个 curl。只要把：
-
-- `OPENILINK_HUB_URL`
-- `OPENILINK_HUB_TOKEN`
-
-配好，程序就会自动帮你发。
-
----
-
-## 如何获取 Telegram Bot Token
-
-1. 在 Telegram 里找到 **@BotFather**
-2. 发送 `/newbot`
-3. 按提示创建 bot
-4. 创建完成后，BotFather 会返回一串 token
-
-形如：
-
-```text
-123456789:AAxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-```
-
-这就是 `TELEGRAM_BOT_TOKEN`。
-
----
-
-## 如何获取 Telegram Chat ID
-
-### 私聊
-
-1. 先给你的 bot 发一条消息，至少发一次 `/start` 或任意文本
-2. 打开：
-
-```text
-https://api.telegram.org/bot<你的BotToken>/getUpdates
-```
-
-3. 在返回 JSON 里找到：
-
-- `message.chat.id`
-
-这就是你的私聊 Chat ID，通常是纯数字，像这样：
-
-```text
-123456789
-```
-
-### 群组
-
-1. 把 bot 拉进群
-2. 在群里发一条消息，或者 @ 一下 bot
-3. 再打开：
-
-```text
-https://api.telegram.org/bot<你的BotToken>/getUpdates
-```
-
-4. 找到：
-
-- `message.chat.id`
-
-群组 ID 通常长这样：
-
-```text
--100xxxxxxxxxx
-```
-
-### 常见注意事项
-
-- 如果 `getUpdates` 是空数组，通常是因为你还没给 bot 发过消息
-- 如果是群组，bot 进群后最好先发一条消息再查
-- `chat.id` 和 bot 用户 ID 不是一回事，不要填错
-- 群组场景里，`TELEGRAM_CHAT_ID` 一般是负数，别把前面的 `-100` 丢了
-
----
-
-## Codex 配置
-
-### 直接用 npx（首推）
-
-在 `~/.codex/config.toml` 里写：
+### 在 Codex 中配置
 
 ```toml
 notify = ["npx", "-y", "go-codex-notify"]
 ```
 
-这是最推荐的方式：配置最简单，不需要自己管理二进制文件。
-
-### 如果你已经全局安装了 npm 包
+如果已经全局安装：
 
 ```toml
 notify = ["go-codex-notify"]
-```
-
-### 如果你坚持手动下载二进制
-
-把可执行文件放到你自己的固定路径，然后在 `config.toml` 里写它的完整路径。
-
-## 手动二进制 / 开发者用法
-
-下面这些内容主要给两类人：
-
-- 你想自己编译
-- 你不想走 `npx` / `npm`，坚持手动使用二进制
-
-### 本机直接编译
-
-```bash
-go build -o notify-telegram .
-```
-
-### 编译 Windows 版本
-
-```bash
-GOOS=windows GOARCH=amd64 go build -o notify-telegram.exe .
-```
-
-如果你是在 Windows 上直接编译，通常直接运行：
-
-```powershell
-go build -o notify-telegram.exe .
-```
-
-就够了。
-
----
-
-## 本地运行
-
-### 直接运行 Go 程序
-
-```bash
-go run .
-```
-
-### 运行编译后的二进制
-
-```bash
-./notify-telegram
-```
-
-Windows：
-
-```powershell
-.\notify-telegram.exe
-```
-
-### 测试 npm 包入口
-
-```bash
-node scripts/install.js
-node bin/cli.js
-```
-
-如果没有提供配置，会报错提示缺少 `TELEGRAM_BOT_TOKEN` 或 `TELEGRAM_CHAT_ID`。
-
-### 模拟 Codex 输入（可选）
-
-这个工具默认**不依赖 stdin**，直接执行时会：
-
-1. 读配置
-2. 发一个 Telegram POST
-3. 立刻退出
-
-如果你确实想模拟 Codex 传入的数据，也可以手工喂一个 JSON：
-
-```bash
-echo '{"client":"codex-tui","task":"修复登录流程","status":"completed","message":"可以回来看看了"}' | go run .
-```
-
----
-
-## 消息示例
-
-程序发到 Telegram 的消息大概像这样：
-
-```text
-老板，Codex 任务已完成。
-
-时间：2026-04-20 11:20:00
-机器：TB16P
-目录名：my-project
-完整路径：C:\Users\tb16p\code\my-project
-客户端：codex-tui
-任务：修复登录流程
-状态：completed
-消息：老板可以回来看看了
-Git 根目录：C:\Users\tb16p\code\my-project
-Git 分支：main
-最近提交：a1b2c3 fix login callback
-工作区状态：有未提交改动
 ```
