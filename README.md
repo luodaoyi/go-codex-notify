@@ -6,8 +6,9 @@
 
 - Telegram
 - OpeniLink Hub
+- Hermes Webhook
 
-只要配置了对应通道就会推送；两个都配置就同时推送。
+只要配置了对应通道就会推送；多个都配置就同时推送。
 
 ## 用法
 
@@ -32,7 +33,11 @@ export TELEGRAM_BOT_TOKEN="123456789:xxxxxx"
 export TELEGRAM_CHAT_ID="123456789"
 export OPENILINK_HUB_URL="https://hub.011f.com/bot/v1/message/send"
 export OPENILINK_HUB_TOKEN="app_xxxxxxxxxxxxxxxxxxxx"
+export HERMES_WEBHOOK_URL="https://your-server:8644/webhooks/codex-notify"
+export HERMES_WEBHOOK_SECRET="your-hermes-webhook-secret"
 ```
+
+`HERMES_WEBHOOK_SECRET` 可选；设置后会用请求体生成 HMAC-SHA256，并写入 `X-Webhook-Signature`。
 
 ### 或使用配置文件
 
@@ -49,7 +54,9 @@ export OPENILINK_HUB_TOKEN="app_xxxxxxxxxxxxxxxxxxxx"
   "bot_token": "123456789:xxxxxx",
   "chat_id": "123456789",
   "openilink_hub_url": "https://hub.011f.com/bot/v1/message/send",
-  "openilink_hub_token": "app_xxxxxxxxxxxxxxxxxxxx"
+  "openilink_hub_token": "app_xxxxxxxxxxxxxxxxxxxx",
+  "hermes_webhook_url": "https://your-server:8644/webhooks/codex-notify",
+  "hermes_webhook_secret": "your-hermes-webhook-secret"
 }
 ```
 

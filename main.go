@@ -2,6 +2,9 @@ package main
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,10 +18,12 @@ import (
 )
 
 type Config struct {
-	BotToken         string `json:"bot_token"`
-	ChatID           string `json:"chat_id"`
-	OpeniLinkHubURL   string `json:"openilink_hub_url"`
-	OpeniLinkHubToken string `json:"openilink_hub_token"`
+	BotToken            string `json:"bot_token"`
+	ChatID              string `json:"chat_id"`
+	OpeniLinkHubURL     string `json:"openilink_hub_url"`
+	OpeniLinkHubToken   string `json:"openilink_hub_token"`
+	HermesWebhookURL    string `json:"hermes_webhook_url"`
+	HermesWebhookSecret string `json:"hermes_webhook_secret"`
 }
 
 type NotifyPayload struct {
@@ -39,6 +44,11 @@ type OpeniLinkRequest struct {
 	Content string `json:"content"`
 }
 
+type HermesWebhookRequest struct {
+	EventType string `json:"event_type"`
+	Message   string `json:"message"`
+}
+
 func main() {
 	cfg, err := loadConfig()
 	if err != nil {
@@ -56,10 +66,12 @@ func main() {
 
 func loadConfig() (Config, error) {
 	cfg := Config{
-		BotToken:          strings.TrimSpace(os.Getenv("TELEGRAM_BOT_TOKEN")),
-		ChatID:            strings.TrimSpace(os.Getenv("TELEGRAM_CHAT_ID")),
-		OpeniLinkHubURL:   strings.TrimSpace(os.Getenv("OPENILINK_HUB_URL")),
-		OpeniLinkHubToken: strings.TrimSpace(os.Getenv("OPENILINK_HUB_TOKEN")),
+		BotToken:            strings.TrimSpace(os.Getenv("TELEGRAM_BOT_TOKEN")),
+		ChatID:              strings.TrimSpace(os.Getenv("TELEGRAM_CHAT_ID")),
+		OpeniLinkHubURL:     strings.TrimSpace(os.Getenv("OPENILINK_HUB_URL")),
+		OpeniLinkHubToken:   strings.TrimSpace(os.Getenv("OPENILINK_HUB_TOKEN")),
+		HermesWebhookURL:    strings.TrimSpace(os.Getenv("HERMES_WEBHOOK_URL")),
+		HermesWebhookSecret: strings.TrimSpace(os.Getenv("HERMES_WEBHOOK_SECRET")),
 	}
 
 	configPath := strings.TrimSpace(os.Getenv("CODEX_NOTIFY_CONFIG"))
@@ -84,6 +96,12 @@ func loadConfig() (Config, error) {
 			if cfg.OpeniLinkHubToken == "" {
 				cfg.OpeniLinkHubToken = strings.TrimSpace(fileCfg.OpeniLinkHubToken)
 			}
+			if cfg.HermesWebhookURL == "" {
+				cfg.HermesWebhookURL = strings.TrimSpace(fileCfg.HermesWebhookURL)
+			}
+			if cfg.HermesWebhookSecret == "" {
+				cfg.HermesWebhookSecret = strings.TrimSpace(fileCfg.HermesWebhookSecret)
+			}
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return Config{}, fmt.Errorf("read config file %s: %w", configPath, err)
 		}
@@ -91,9 +109,10 @@ func loadConfig() (Config, error) {
 
 	telegramConfigured := cfg.BotToken != "" && cfg.ChatID != ""
 	openiLinkConfigured := cfg.OpeniLinkHubURL != "" && cfg.OpeniLinkHubToken != ""
+	hermesConfigured := cfg.HermesWebhookURL != ""
 
-	if !telegramConfigured && !openiLinkConfigured {
-		return Config{}, errors.New("no notification channel configured; set Telegram and/or OpeniLink Hub via env or config file")
+	if !telegramConfigured && !openiLinkConfigured && !hermesConfigured {
+		return Config{}, errors.New("no notification channel configured; set Telegram, OpeniLink Hub, and/or Hermes webhook via env or config file")
 	}
 
 	if (cfg.BotToken == "") != (cfg.ChatID == "") {
@@ -288,6 +307,43 @@ func sendOpeniLinkHub(cfg Config, text string) error {
 	return nil
 }
 
+func sendHermesWebhook(cfg Config, text string) error {
+	body, err := json.Marshal(HermesWebhookRequest{
+		EventType: "codex_notify",
+		Message:   text,
+	})
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, cfg.HermesWebhookURL, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	if cfg.HermesWebhookSecret != "" {
+		req.Header.Set("X-Webhook-Signature", signHermesWebhook(body, cfg.HermesWebhookSecret))
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("hermes webhook %s: %s", resp.Status, strings.TrimSpace(string(respBody)))
+	}
+	return nil
+}
+
+func signHermesWebhook(body []byte, secret string) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(body)
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
 func sendNotifications(cfg Config, text string) error {
 	var errs []string
 
@@ -300,6 +356,12 @@ func sendNotifications(cfg Config, text string) error {
 	if cfg.OpeniLinkHubURL != "" && cfg.OpeniLinkHubToken != "" {
 		if err := sendOpeniLinkHub(cfg, text); err != nil {
 			errs = append(errs, "openilink hub: "+err.Error())
+		}
+	}
+
+	if cfg.HermesWebhookURL != "" {
+		if err := sendHermesWebhook(cfg, text); err != nil {
+			errs = append(errs, "hermes webhook: "+err.Error())
 		}
 	}
 

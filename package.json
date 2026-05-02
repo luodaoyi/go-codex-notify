@@ -1,6 +1,6 @@
 {
   "name": "go-codex-notify",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Multi-channel notifier for OpenAI Codex notify hooks",
   "license": "MIT",
   "bin": {
@@ -26,6 +26,7 @@
   "keywords": [
     "codex",
     "telegram",
+    "hermes",
     "notify",
     "cli",
     "npx"

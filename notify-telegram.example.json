@@ -1,4 +1,8 @@
 {
   "bot_token": "123456789:replace_me",
-  "chat_id": "123456789"
+  "chat_id": "123456789",
+  "openilink_hub_url": "https://hub.011f.com/bot/v1/message/send",
+  "openilink_hub_token": "app_xxxxxxxxxxxxxxxxxxxx",
+  "hermes_webhook_url": "https://your-server:8644/webhooks/codex-notify",
+  "hermes_webhook_secret": "your-hermes-webhook-secret"
 }
