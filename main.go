@@ -98,8 +98,6 @@ func main() {
 	if err := sendNotifications(cfg, msg, payload); err != nil {
 		fatalf("send notification failed: %v", err)
 	}
-
-	fmt.Println("ok")
 }
 
 func loadConfig() (Config, error) {

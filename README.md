@@ -4,6 +4,8 @@
 
 你把它接到 Codex 的完成钩子上后，任务停下来的时候，它会自动把结果发到你常用的地方，比如 Telegram、OpeniLink Hub，或者你自己的 Hermes Webhook。
 
+它是通知型 hook：成功时不会向 stdout 输出内容，避免 Codex 把通知工具的输出误当成下一轮上下文。
+
 ## 你会收到什么
 
 默认会发一段中文通知，大致长这样：
@@ -82,6 +84,8 @@ Codex 配置写在：
 
 #### 新版 Codex hooks：macOS / Linux
 
+直接使用原生命令即可，不需要再用 shell 包一层：
+
 ```toml
 [features]
 codex_hooks = true
@@ -128,6 +132,8 @@ statusMessage = "Sending notification"
 ```
 
 注意不要写成 `[[hooks]]`，否则 Codex 会报：`invalid type: sequence, expected struct HooksToml in hooks`。`hooks` 本身是普通表，只有 `hooks.Stop` 和 `hooks.Stop.hooks` 是数组表。
+
+新版 Stop hook 会通过 stdin 传入 JSON，例如 `session_id`、`turn_id`、`transcript_path`、`cwd`、`model`、`permission_mode` 和 `last_assistant_message`。`go-codex-notify` 会原样读取这些字段；成功时 stdout 为空，只在失败时向 stderr 写错误并返回非零退出码。
 
 如果你全局安装后有固定的可执行文件路径，也可以这样写：
 

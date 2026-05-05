@@ -22,7 +22,7 @@ const HAS_LOCAL_SOURCE = existsSync(GO_MAIN);
 function runGoSource() {
   return spawnSync('go', ['run', '.'], {
     cwd: ROOT,
-    stdio: ['ignore', 'inherit', 'inherit'],
+    stdio: ['inherit', 'inherit', 'inherit'],
     env: process.env,
   });
 }
@@ -36,7 +36,7 @@ function runBundledBinary() {
   }
 
   return spawnSync(binaryPath, process.argv.slice(2), {
-    stdio: ['ignore', 'inherit', 'inherit'],
+    stdio: ['inherit', 'inherit', 'inherit'],
     env: process.env,
   });
 }
