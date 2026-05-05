@@ -74,37 +74,35 @@ export HERMES_WEBHOOK_SECRET="your-hermes-webhook-secret"
 
 ### 3）接到 Codex 上
 
-推荐用 Codex 的 lifecycle hooks，尤其是 `Stop`。这样一轮任务结束后，就会自动通知。
+把通知命令写进 Codex 的配置文件：
 
-示例，通常放到 Codex 配置文件里：
-
-```yaml
-hooks:
-  Stop:
-    - command: npx -y go-codex-notify
+```text
+~/.codex/config.toml
 ```
 
-如果你已经全局安装了：
-
-```yaml
-hooks:
-  Stop:
-    - command: go-codex-notify
-```
-
-### 4）如果你还在用旧版 Codex
-
-也兼容旧版 `notify` 写法：
+macOS / Linux 可以这样写：
 
 ```toml
 notify = ["npx", "-y", "go-codex-notify"]
 ```
 
-全局安装的话：
+Windows 建议写 `npx.cmd` 的完整路径，避免 Codex 找不到 `npx`：
+
+```toml
+notify = [
+    'C:\Program Files\nodejs\npx.cmd',
+    "-y",
+    "go-codex-notify",
+]
+```
+
+如果你已经全局安装了，也可以直接调用：
 
 ```toml
 notify = ["go-codex-notify"]
 ```
+
+Windows 全局安装后如果命令找不到，同样建议写完整路径。
 
 ## 配置文件
 
@@ -174,6 +172,5 @@ export CODEX_NOTIFY_CONFIG="/path/to/notify-telegram.json"
 
 ## 兼容性说明
 
-- 新版 Codex：推荐 lifecycle hooks
-- 旧版 Codex：继续用 `notify`
+- Codex 通知配置写在 `~/.codex/config.toml` 的 `notify` 数组里
 - 多个通知通道同时配置时，会一起发送
