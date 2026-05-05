@@ -74,13 +74,20 @@ export HERMES_WEBHOOK_SECRET="your-hermes-webhook-secret"
 
 ### 3）接到 Codex 上
 
-新版 Codex hook 配置写在 `~/.codex/config.toml` 里。先打开 hook 功能，再配置 `Stop` 事件：
+Codex 配置写在：
+
+```text
+~/.codex/config.toml
+```
+
+#### 新版 Codex hooks：macOS / Linux
 
 ```toml
 [features]
 codex_hooks = true
 
 [[hooks.Stop]]
+
 [[hooks.Stop.hooks]]
 type = "command"
 command = "npx -y go-codex-notify"
@@ -88,13 +95,14 @@ timeout = 30
 statusMessage = "Sending notification"
 ```
 
-如果你已经全局安装了，也可以直接调用：
+如果你已经全局安装了：
 
 ```toml
 [features]
 codex_hooks = true
 
 [[hooks.Stop]]
+
 [[hooks.Stop.hooks]]
 type = "command"
 command = "go-codex-notify"
@@ -102,13 +110,47 @@ timeout = 30
 statusMessage = "Sending notification"
 ```
 
-如果你还在用旧版 Codex，才继续用旧的 `notify` 写法：
+#### 新版 Codex hooks：Windows
+
+Windows 上建议写 `npx.cmd` 的完整路径。因为路径里有空格，推荐用 TOML 单引号包住整条命令，然后在命令内部给路径加双引号：
+
+```toml
+[features]
+codex_hooks = true
+
+[[hooks.Stop]]
+
+[[hooks.Stop.hooks]]
+type = "command"
+command = '"C:\Program Files\nodejs\npx.cmd" -y go-codex-notify'
+timeout = 30
+statusMessage = "Sending notification"
+```
+
+如果你全局安装后有固定的可执行文件路径，也可以这样写：
+
+```toml
+[features]
+codex_hooks = true
+
+[[hooks.Stop]]
+
+[[hooks.Stop.hooks]]
+type = "command"
+command = '"C:\Users\你的用户名\AppData\Roaming\npm\go-codex-notify.cmd"'
+timeout = 30
+statusMessage = "Sending notification"
+```
+
+#### 旧版 Codex notify
+
+如果你的 Codex 还不支持 hooks，才用旧的 `notify` 写法：
 
 ```toml
 notify = ["npx", "-y", "go-codex-notify"]
 ```
 
-Windows 旧版 `notify` 如果找不到 `npx`，可以写完整路径：
+Windows 旧版 `notify` 可以写成：
 
 ```toml
 notify = [
@@ -186,5 +228,6 @@ export CODEX_NOTIFY_CONFIG="/path/to/notify-telegram.json"
 
 ## 兼容性说明
 
-- Codex 通知配置写在 `~/.codex/config.toml` 的 `notify` 数组里
+- 新版 Codex：优先使用 `[features] codex_hooks = true` 和 `[[hooks.Stop]]` / `[[hooks.Stop.hooks]]`
+- 旧版 Codex：继续使用 `notify = [...]`
 - 多个通知通道同时配置时，会一起发送
