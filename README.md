@@ -74,37 +74,33 @@ export HERMES_WEBHOOK_SECRET="your-hermes-webhook-secret"
 
 ### 3）接到 Codex 上
 
-把通知命令写进 Codex 的配置文件：
+新版 Codex 的 hook 配置写在 `~/.codex/config.toml` 里，格式是 TOML 的数组表，不是 JSON 也不是 YAML。
 
-```text
-~/.codex/config.toml
-```
-
-macOS / Linux 可以这样写：
+最小可用写法：
 
 ```toml
-notify = ["npx", "-y", "go-codex-notify"]
-```
-
-Windows 建议写 `npx.cmd` 的完整路径，避免 Codex 找不到 `npx`：
-
-```toml
-notify = [
-    'C:\Program Files\nodejs\npx.cmd',
-    "-y",
-    "go-codex-notify",
-]
+[[Stop]]
+[[Stop.hooks]]
+type = "command"
+command = "npx -y go-codex-notify"
 ```
 
 如果你已经全局安装了，也可以直接调用：
 
 ```toml
-notify = ["go-codex-notify"]
+[[Stop]]
+[[Stop.hooks]]
+type = "command"
+command = "go-codex-notify"
 ```
 
-Windows 全局安装后如果命令找不到，同样建议写完整路径。
+如果你还在用旧版 Codex，才继续用旧的 `notify` 写法：
 
-## 配置文件
+```toml
+notify = ["npx", "-y", "go-codex-notify"]
+```
+
+### 4）如果你还在用旧版 Codex
 
 如果你不想全放环境变量，也可以用配置文件。
 
