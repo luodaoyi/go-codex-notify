@@ -127,6 +127,8 @@ timeout = 30
 statusMessage = "Sending notification"
 ```
 
+注意不要写成 `[[hooks]]`，否则 Codex 会报：`invalid type: sequence, expected struct HooksToml in hooks`。`hooks` 本身是普通表，只有 `hooks.Stop` 和 `hooks.Stop.hooks` 是数组表。
+
 如果你全局安装后有固定的可执行文件路径，也可以这样写：
 
 ```toml
