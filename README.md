@@ -1,20 +1,39 @@
 # go-codex-notify
 
-`go-codex-notify` 是一个给 OpenAI Codex `notify` 使用的通知工具。
+这是一个给 Codex 发完成通知的小工具。
 
-它会在 Codex 任务结束后自动推送一条消息，支持：
+你把它接到 Codex 的完成钩子上后，任务停下来的时候，它会自动把结果发到你常用的地方，比如 Telegram、OpeniLink Hub，或者你自己的 Hermes Webhook。
 
-- Telegram
-- OpeniLink Hub
-- Hermes Webhook
+## 你会收到什么
 
-只要配置了对应通道就会推送；多个都配置就同时推送。
+默认会发一段中文通知，大致长这样：
 
-## 用法
+```text
+父亲，Codex 任务已完成。
 
-### 安装
+客户端：codex-tui
+会话：...
+轮次：...
+项目目录：...
+模型：...
+权限模式：...
+转写记录：...
+目标：...
+工具：...
+工具调用：...
+任务：...
+状态：...
+消息：...
+Codex 回应：...
+```
 
-推荐直接使用：
+如果这次任务里设置了 goal，通知里还会自动带上目标摘要。
+
+## 怎么用
+
+### 1）安装
+
+推荐直接运行：
 
 ```bash
 npx -y go-codex-notify
@@ -26,25 +45,93 @@ npx -y go-codex-notify
 npm install -g go-codex-notify
 ```
 
-### 配置环境变量
+### 2）配置通知渠道
+
+任选一种或几种都行。配置了哪个，就往哪个发。
+
+#### Telegram
 
 ```bash
 export TELEGRAM_BOT_TOKEN="123456789:xxxxxx"
 export TELEGRAM_CHAT_ID="123456789"
+```
+
+#### OpeniLink Hub
+
+```bash
 export OPENILINK_HUB_URL="https://hub.011f.com/bot/v1/message/send"
 export OPENILINK_HUB_TOKEN="app_xxxxxxxxxxxxxxxxxxxx"
+```
+
+#### Hermes Webhook
+
+```bash
 export HERMES_WEBHOOK_URL="https://your-server:8644/webhooks/codex-notify"
 export HERMES_WEBHOOK_SECRET="your-hermes-webhook-secret"
 ```
 
-`HERMES_WEBHOOK_SECRET` 可选；设置后会用请求体生成 HMAC-SHA256，并写入 `X-Webhook-Signature`。
+`HERMES_WEBHOOK_SECRET` 可选；设置后会给请求体签名。
 
-### 或使用配置文件
+### 3）接到 Codex 上
+
+推荐用 Codex 的 lifecycle hooks，尤其是 `Stop`。这样一轮任务结束后，就会自动通知。
+
+示例：
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "command": "npx -y go-codex-notify"
+      }
+    ]
+  }
+}
+```
+
+如果你已经全局安装了：
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "command": "go-codex-notify"
+      }
+    ]
+  }
+}
+```
+
+### 4）如果你还在用旧版 Codex
+
+也兼容旧版 `notify` 写法：
+
+```toml
+notify = ["npx", "-y", "go-codex-notify"]
+```
+
+全局安装的话：
+
+```toml
+notify = ["go-codex-notify"]
+```
+
+## 配置文件
+
+如果你不想全放环境变量，也可以用配置文件。
 
 默认路径：
 
 ```text
 ~/.codex/notify-telegram.json
+```
+
+你也可以自己指定：
+
+```bash
+export CODEX_NOTIFY_CONFIG="/path/to/notify-telegram.json"
 ```
 
 示例：
@@ -60,20 +147,45 @@ export HERMES_WEBHOOK_SECRET="your-hermes-webhook-secret"
 }
 ```
 
-也可以自定义路径：
+## 给 Hermes 的内容
 
-```bash
-export CODEX_NOTIFY_CONFIG="/path/to/notify-telegram.json"
+如果你接的是 Hermes Webhook，请求体里会带上中文正文和一些结构化信息。你可以直接把 `{message}` 原样转发出去，也可以自己再做二次加工。
+
+示例：
+
+```json
+{
+  "event_type": "codex_notify",
+  "message": "渲染后的中文通知正文",
+  "client": "codex-tui",
+  "hook_event_name": "Stop",
+  "session_id": "...",
+  "turn_id": "...",
+  "cwd": "...",
+  "transcript_path": "...",
+  "model": "...",
+  "permission_mode": "...",
+  "last_assistant_message": "...",
+  "tool_name": "...",
+  "tool_use_id": "...",
+  "goal": {
+    "objective": "...",
+    "status": "active",
+    "token_budget": "200000",
+    "tokens_used": "12345",
+    "time_used": "90",
+    "created_at": "1776272400",
+    "updated_at": "1776272490",
+    "thread_id": "...",
+    "turn_id": "..."
+  }
+}
 ```
 
-### 在 Codex 中配置
+没有对应上下文时，`omitempty` 字段不会出现在请求体里。
 
-```toml
-notify = ["npx", "-y", "go-codex-notify"]
-```
+## 兼容性说明
 
-如果已经全局安装：
-
-```toml
-notify = ["go-codex-notify"]
-```
+- 新版 Codex：推荐 lifecycle hooks
+- 旧版 Codex：继续用 `notify`
+- 多个通知通道同时配置时，会一起发送
