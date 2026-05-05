@@ -76,32 +76,20 @@ export HERMES_WEBHOOK_SECRET="your-hermes-webhook-secret"
 
 推荐用 Codex 的 lifecycle hooks，尤其是 `Stop`。这样一轮任务结束后，就会自动通知。
 
-示例：
+示例，通常放到 Codex 配置文件里：
 
-```json
-{
-  "hooks": {
-    "Stop": [
-      {
-        "command": "npx -y go-codex-notify"
-      }
-    ]
-  }
-}
+```yaml
+hooks:
+  Stop:
+    - command: npx -y go-codex-notify
 ```
 
 如果你已经全局安装了：
 
-```json
-{
-  "hooks": {
-    "Stop": [
-      {
-        "command": "go-codex-notify"
-      }
-    ]
-  }
-}
+```yaml
+hooks:
+  Stop:
+    - command: go-codex-notify
 ```
 
 ### 4）如果你还在用旧版 Codex
