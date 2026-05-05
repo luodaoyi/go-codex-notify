@@ -1,6 +1,6 @@
 {
   "name": "go-codex-notify",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "description": "Multi-channel notifier for OpenAI Codex notify hooks",
   "license": "MIT",
   "bin": {

@@ -1,5 +1,13 @@
 # go-codex-notify
 
+[![npm version](https://img.shields.io/npm/v/go-codex-notify?logo=npm&label=npm)](https://www.npmjs.com/package/go-codex-notify)
+[![npm downloads](https://img.shields.io/npm/dm/go-codex-notify?logo=npm&label=downloads%2Fmonth)](https://www.npmjs.com/package/go-codex-notify)
+[![GitHub release](https://img.shields.io/github/v/release/luodaoyi/go-codex-notify?logo=github)](https://github.com/luodaoyi/go-codex-notify/releases)
+[![release downloads](https://img.shields.io/github/downloads/luodaoyi/go-codex-notify/total?logo=github&label=release%20downloads)](https://github.com/luodaoyi/go-codex-notify/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/luodaoyi/go-codex-notify/ci.yml?branch=main&logo=githubactions)](https://github.com/luodaoyi/go-codex-notify/actions/workflows/ci.yml)
+[![node](https://img.shields.io/node/v/go-codex-notify?logo=nodedotjs)](https://www.npmjs.com/package/go-codex-notify)
+[![license](https://img.shields.io/github/license/luodaoyi/go-codex-notify)](./LICENSE)
+
 这是一个给 Codex 发完成通知的小工具。
 
 你把它接到 Codex 的完成钩子上后，任务停下来的时候，它会自动把结果发到你常用的地方，比如 Telegram、OpeniLink Hub，或者你自己的 Hermes Webhook。
