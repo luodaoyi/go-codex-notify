@@ -102,7 +102,8 @@ codex_hooks = true
 
 [[hooks.Stop.hooks]]
 type = "command"
-command = "npx -y go-codex-notify"
+command = "npx"
+args = ["-y", "go-codex-notify"]
 timeout = 30
 statusMessage = "Sending notification"
 ```
@@ -124,7 +125,7 @@ statusMessage = "Sending notification"
 
 #### 新版 Codex hooks：Windows
 
-Windows 上建议写 `npx.cmd` 的完整路径。因为路径里有空格，推荐用 TOML 单引号包住整条命令，然后在命令内部给路径加双引号：
+Windows 上建议把可执行文件路径放进 `command`，把参数放进 `args`。不要把整条命令拼成一个字符串，否则很容易出现 `Stop hook (failed)` / `hook exited with code 1` 这类问题。
 
 ```toml
 [features]
@@ -134,7 +135,8 @@ codex_hooks = true
 
 [[hooks.Stop.hooks]]
 type = "command"
-command = '"C:\Program Files\nodejs\npx.cmd" -y go-codex-notify'
+command = 'C:\Program Files\nodejs\npx.cmd'
+args = ["-y", "go-codex-notify"]
 timeout = 30
 statusMessage = "Sending notification"
 ```
@@ -153,7 +155,7 @@ codex_hooks = true
 
 [[hooks.Stop.hooks]]
 type = "command"
-command = '"C:\Users\你的用户名\AppData\Roaming\npm\go-codex-notify.cmd"'
+command = 'C:\Users\你的用户名\AppData\Roaming\npm\go-codex-notify.cmd'
 timeout = 30
 statusMessage = "Sending notification"
 ```

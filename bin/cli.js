@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 const { spawnSync } = require('node:child_process');
-const { existsSync } = require('node:fs');
+const { existsSync, readFileSync } = require('node:fs');
 const { join } = require('node:path');
 
 const ROOT = join(__dirname, '..');
@@ -10,7 +10,8 @@ const HAS_LOCAL_SOURCE = existsSync(GO_MAIN);
 
 (() => {
   try {
-    const result = HAS_LOCAL_SOURCE ? runGoSource() : runBundledBinary();
+    const stdin = readHookInput();
+    const result = HAS_LOCAL_SOURCE ? runGoSource(stdin) : runBundledBinary(stdin);
     if (result.error) throw result.error;
     process.exit(result.status ?? 0);
   } catch (err) {
@@ -19,15 +20,16 @@ const HAS_LOCAL_SOURCE = existsSync(GO_MAIN);
   }
 })();
 
-function runGoSource() {
-  return spawnSync('go', ['run', '.'], {
+function runGoSource(stdin) {
+  return spawnSync('go', ['run', '.', ...process.argv.slice(2)], {
     cwd: ROOT,
-    stdio: ['inherit', 'inherit', 'inherit'],
+    input: stdin,
+    stdio: ['pipe', 'inherit', 'inherit'],
     env: process.env,
   });
 }
 
-function runBundledBinary() {
+function runBundledBinary(stdin) {
   const binaryPath = join(ROOT, '.bin', getArtifactName());
   if (!existsSync(binaryPath)) {
     throw new Error(
@@ -36,9 +38,17 @@ function runBundledBinary() {
   }
 
   return spawnSync(binaryPath, process.argv.slice(2), {
-    stdio: ['inherit', 'inherit', 'inherit'],
+    input: stdin,
+    stdio: ['pipe', 'inherit', 'inherit'],
     env: process.env,
   });
+}
+
+function readHookInput() {
+  if (process.stdin.isTTY) {
+    return undefined;
+  }
+  return readFileSync(0);
 }
 
 function getArtifactName() {
