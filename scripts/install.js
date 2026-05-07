@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const { createWriteStream, existsSync, mkdirSync, chmodSync } = require('node:fs');
+const { createWriteStream, existsSync, mkdirSync, chmodSync, copyFileSync } = require('node:fs');
 const { join, dirname } = require('node:path');
 const { homedir, platform, arch } = require('node:os');
 const https = require('node:https');
@@ -12,19 +12,24 @@ const versionTag = `v${pkg.version}`;
 const url = `https://github.com/luodaoyi/go-codex-notify/releases/download/${versionTag}/${artifact}`;
 const cachePath = join(homedir(), '.codex', 'go-codex-notify', pkg.version, artifact);
 const localBinPath = join(__dirname, '..', '.bin', artifact);
+const stableBinPath = join(homedir(), '.codex', 'bin', stableBinaryName());
 
 (async () => {
   try {
     if (!existsSync(cachePath)) {
       await download(url, cachePath);
-      if (platform() !== 'win32') chmodSync(cachePath, 0o755);
+      ensureExecutable(cachePath);
     }
 
     mkdirSync(dirname(localBinPath), { recursive: true });
     copy(cachePath, localBinPath);
-    if (platform() !== 'win32') chmodSync(localBinPath, 0o755);
+    ensureExecutable(localBinPath);
 
-    console.log(`[go-codex-notify] ready: ${artifact}`);
+    mkdirSync(dirname(stableBinPath), { recursive: true });
+    copy(cachePath, stableBinPath);
+    ensureExecutable(stableBinPath);
+
+    console.log(`[go-codex-notify] ready: ${stableBinPath}`);
   } catch (err) {
     console.error(`[go-codex-notify] install failed: ${err.message}`);
     process.exit(1);
@@ -47,6 +52,10 @@ function resolveArtifactName() {
     throw new Error(`unsupported platform: ${key}`);
   }
   return map[key];
+}
+
+function stableBinaryName() {
+  return platform() === 'win32' ? 'go-codex-notify.exe' : 'go-codex-notify';
 }
 
 function download(url, target) {
@@ -76,6 +85,11 @@ function download(url, target) {
 }
 
 function copy(src, dst) {
-  const fs = require('node:fs');
-  fs.copyFileSync(src, dst);
+  copyFileSync(src, dst);
+}
+
+function ensureExecutable(target) {
+  if (platform() !== 'win32') {
+    chmodSync(target, 0o755);
+  }
 }

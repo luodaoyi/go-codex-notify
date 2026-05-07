@@ -55,6 +55,13 @@ npx -y go-codex-notify
 npm install -g go-codex-notify
 ```
 
+安装完成后，`postinstall` 会自动把当前平台的原生二进制放到稳定路径：
+
+- macOS / Linux：`~/.codex/bin/go-codex-notify`
+- Windows：`C:\Users\你的用户名\.codex\bin\go-codex-notify.exe`
+
+后面的 Codex 配置统一建议指向这个固定路径，不再直接依赖 `npx` 或 `*.cmd`。
+
 ### 2）配置通知渠道
 
 任选一种或几种都行。配置了哪个，就往哪个发。
@@ -92,7 +99,7 @@ Codex 配置写在：
 
 #### 新版 Codex hooks：macOS / Linux
 
-直接使用原生命令即可，不需要再用 shell 包一层：
+优先使用安装脚本写入的稳定路径：
 
 ```toml
 [features]
@@ -102,30 +109,16 @@ codex_hooks = true
 
 [[hooks.Stop.hooks]]
 type = "command"
-command = "npx"
-args = ["-y", "go-codex-notify"]
+command = "/Users/你的用户名/.codex/bin/go-codex-notify"
 timeout = 30
 statusMessage = "Sending notification"
 ```
 
-如果你已经全局安装了：
-
-```toml
-[features]
-codex_hooks = true
-
-[[hooks.Stop]]
-
-[[hooks.Stop.hooks]]
-type = "command"
-command = "go-codex-notify"
-timeout = 30
-statusMessage = "Sending notification"
-```
+如果你更喜欢自己管理路径，也可以改成你机器上的实际绝对路径。
 
 #### 新版 Codex hooks：Windows
 
-Windows 上建议把可执行文件路径放进 `command`，把参数放进 `args`。不要把整条命令拼成一个字符串，否则很容易出现 `Stop hook (failed)` / `hook exited with code 1` 这类问题。
+Windows 上同样建议直接写稳定路径，不要把 `npx.cmd`、`.cmd` 或整条命令字符串塞进 `command`。`hooks.Stop.hooks` 在 Windows 下更稳的方式就是直接指向原生 `.exe`：
 
 ```toml
 [features]
@@ -135,8 +128,7 @@ codex_hooks = true
 
 [[hooks.Stop.hooks]]
 type = "command"
-command = 'C:\Program Files\nodejs\npx.cmd'
-args = ["-y", "go-codex-notify"]
+command = 'C:\Users\你的用户名\.codex\bin\go-codex-notify.exe'
 timeout = 30
 statusMessage = "Sending notification"
 ```
@@ -145,36 +137,25 @@ statusMessage = "Sending notification"
 
 新版 Stop hook 会通过 stdin 传入 JSON，例如 `session_id`、`turn_id`、`transcript_path`、`cwd`、`model`、`permission_mode` 和 `last_assistant_message`。`go-codex-notify` 会原样读取这些字段；成功时 stdout 为空，只在失败时向 stderr 写错误并返回非零退出码。
 
-如果你全局安装后有固定的可执行文件路径，也可以这样写：
+如果你想手动刷新这个稳定路径，可以重新执行一次：
 
-```toml
-[features]
-codex_hooks = true
-
-[[hooks.Stop]]
-
-[[hooks.Stop.hooks]]
-type = "command"
-command = 'C:\Users\你的用户名\AppData\Roaming\npm\go-codex-notify.cmd'
-timeout = 30
-statusMessage = "Sending notification"
+```bash
+node scripts/install.js
 ```
 
 #### 旧版 Codex notify
 
-如果你的 Codex 还不支持 hooks，才用旧的 `notify` 写法：
+如果你的 Codex 还不支持 hooks，才用旧的 `notify` 写法。这里也建议直接指向同一个稳定路径：
 
 ```toml
-notify = ["npx", "-y", "go-codex-notify"]
+notify = ["/Users/你的用户名/.codex/bin/go-codex-notify"]
 ```
 
 Windows 旧版 `notify` 可以写成：
 
 ```toml
 notify = [
-    'C:\Program Files\nodejs\npx.cmd',
-    "-y",
-    "go-codex-notify",
+    'C:\Users\你的用户名\.codex\bin\go-codex-notify.exe',
 ]
 ```
 
