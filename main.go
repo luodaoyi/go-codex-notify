@@ -494,6 +494,9 @@ func barkPushURL(cfg Config) string {
 	if serverURL == "" {
 		serverURL = "https://api.day.app"
 	}
+	if cfg.BarkDeviceKey == "" {
+		return strings.TrimRight(serverURL, "/")
+	}
 	return strings.TrimRight(serverURL, "/") + "/push"
 }
 
@@ -561,7 +564,7 @@ func sendNotifications(cfg Config, text string, payload NotifyPayload) error {
 		}
 	}
 
-	if cfg.BarkURL != "" || cfg.BarkDeviceKey != "" {
+	if cfg.BarkURL != "" || cfg.BarkDeviceKey != "" || cfg.BarkServerURL != "" {
 		if err := sendBark(cfg, text); err != nil {
 			errs = append(errs, "bark: "+err.Error())
 		}

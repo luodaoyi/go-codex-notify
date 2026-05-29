@@ -275,6 +275,13 @@ func TestBarkURLOverridesServerURL(t *testing.T) {
 	}
 }
 
+func TestBarkServerURLWithoutDeviceKeyUsesDirectPushURL(t *testing.T) {
+	cfg := Config{BarkServerURL: "https://push.example.test/device-key-from-server-url"}
+	if got := barkPushURL(cfg); got != "https://push.example.test/device-key-from-server-url" {
+		t.Fatalf("unexpected bark push url: %q", got)
+	}
+}
+
 func TestSendBarkSupportsDeviceKeyInRequestURL(t *testing.T) {
 	const text = "Codex finished"
 
@@ -305,6 +312,44 @@ func TestSendBarkSupportsDeviceKeyInRequestURL(t *testing.T) {
 	cfg := Config{BarkURL: server.URL + "/device-key-from-url"}
 	if err := sendBark(cfg, text); err != nil {
 		t.Fatalf("sendBark returned error: %v", err)
+	}
+}
+
+func TestSendNotificationsSendsBarkWhenOnlyServerURLConfigured(t *testing.T) {
+	const text = "Codex finished"
+
+	called := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		if r.URL.Path != "/device-key-from-server-url" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		var payload map[string]interface{}
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if _, ok := payload["device_key"]; ok {
+			t.Fatalf("device_key should be omitted when only bark_server_url is configured: %#v", payload)
+		}
+		if payload["body"] != text {
+			t.Fatalf("unexpected body: %q", payload["body"])
+		}
+
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	cfg := Config{BarkServerURL: server.URL + "/device-key-from-server-url"}
+	if err := sendNotifications(cfg, text, NotifyPayload{}); err != nil {
+		t.Fatalf("sendNotifications returned error: %v", err)
+	}
+	if !called {
+		t.Fatal("expected bark notification to be sent")
 	}
 }
 
