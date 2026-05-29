@@ -41,6 +41,10 @@ func TestLoadConfigReadsJsonFile(t *testing.T) {
 	t.Setenv("OPENILINK_HUB_TOKEN", "")
 	t.Setenv("HERMES_WEBHOOK_URL", "")
 	t.Setenv("HERMES_WEBHOOK_SECRET", "")
+	t.Setenv("BARK_SERVER_URL", "")
+	t.Setenv("BARK_URL", "")
+	t.Setenv("BARK_DEVICE_KEY", "")
+	t.Setenv("BARK_TITLE", "")
 
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "notify-telegram.json")
@@ -69,6 +73,10 @@ func TestLoadConfigReadsHermesWebhookJsonFile(t *testing.T) {
 	t.Setenv("OPENILINK_HUB_TOKEN", "")
 	t.Setenv("HERMES_WEBHOOK_URL", "")
 	t.Setenv("HERMES_WEBHOOK_SECRET", "")
+	t.Setenv("BARK_SERVER_URL", "")
+	t.Setenv("BARK_URL", "")
+	t.Setenv("BARK_DEVICE_KEY", "")
+	t.Setenv("BARK_TITLE", "")
 
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "notify-telegram.json")
@@ -87,6 +95,44 @@ func TestLoadConfigReadsHermesWebhookJsonFile(t *testing.T) {
 	}
 	if cfg.HermesWebhookSecret != "secret-from-file" {
 		t.Fatalf("unexpected hermes webhook secret: %q", cfg.HermesWebhookSecret)
+	}
+}
+
+func TestLoadConfigReadsBarkJsonFile(t *testing.T) {
+	t.Setenv("TELEGRAM_BOT_TOKEN", "")
+	t.Setenv("TELEGRAM_CHAT_ID", "")
+	t.Setenv("OPENILINK_HUB_URL", "")
+	t.Setenv("OPENILINK_HUB_TOKEN", "")
+	t.Setenv("HERMES_WEBHOOK_URL", "")
+	t.Setenv("HERMES_WEBHOOK_SECRET", "")
+	t.Setenv("BARK_SERVER_URL", "")
+	t.Setenv("BARK_URL", "")
+	t.Setenv("BARK_DEVICE_KEY", "")
+	t.Setenv("BARK_TITLE", "")
+
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "notify-telegram.json")
+	content := []byte(`{"bark_server_url":"https://bark.example.test","bark_url":"https://example.test/push","bark_device_key":"key-from-file","bark_title":"Codex Done"}`)
+	if err := os.WriteFile(cfgPath, content, 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	t.Setenv("CODEX_NOTIFY_CONFIG", cfgPath)
+
+	cfg, err := loadConfig()
+	if err != nil {
+		t.Fatalf("loadConfig returned error: %v", err)
+	}
+	if cfg.BarkServerURL != "https://bark.example.test" {
+		t.Fatalf("unexpected bark server url: %q", cfg.BarkServerURL)
+	}
+	if cfg.BarkURL != "https://example.test/push" {
+		t.Fatalf("unexpected bark url: %q", cfg.BarkURL)
+	}
+	if cfg.BarkDeviceKey != "key-from-file" {
+		t.Fatalf("unexpected bark device key: %q", cfg.BarkDeviceKey)
+	}
+	if cfg.BarkTitle != "Codex Done" {
+		t.Fatalf("unexpected bark title: %q", cfg.BarkTitle)
 	}
 }
 
@@ -171,6 +217,94 @@ func TestEnrichGoalFromTranscriptIgnoresMissingOrUnrelatedTranscript(t *testing.
 	}
 	if payload.Goal.Objective != "" {
 		t.Fatalf("unexpected goal from missing transcript: %#v", payload.Goal)
+	}
+}
+
+func TestSendBarkPostsNotificationPayload(t *testing.T) {
+	const text = "Codex finished"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+		if r.URL.Path != "/push" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Content-Type"); got != "application/json; charset=utf-8" {
+			t.Fatalf("unexpected content type: %q", got)
+		}
+
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		var payload map[string]interface{}
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if payload["title"] != "Codex Done" {
+			t.Fatalf("unexpected title: %q", payload["title"])
+		}
+		if payload["body"] != text {
+			t.Fatalf("unexpected body: %q", payload["body"])
+		}
+		if payload["device_key"] != "bark-key" {
+			t.Fatalf("unexpected device_key: %q", payload["device_key"])
+		}
+		if payload["group"] != "Codex" {
+			t.Fatalf("unexpected group: %q", payload["group"])
+		}
+
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	cfg := Config{BarkServerURL: server.URL, BarkDeviceKey: "bark-key", BarkTitle: "Codex Done"}
+	if err := sendBark(cfg, text); err != nil {
+		t.Fatalf("sendBark returned error: %v", err)
+	}
+}
+
+func TestBarkURLOverridesServerURL(t *testing.T) {
+	cfg := Config{
+		BarkServerURL: "https://bark.example.test",
+		BarkURL:       "https://push.example.test/custom",
+	}
+	if got := barkPushURL(cfg); got != "https://push.example.test/custom" {
+		t.Fatalf("unexpected bark push url: %q", got)
+	}
+}
+
+func TestSendBarkSupportsDeviceKeyInRequestURL(t *testing.T) {
+	const text = "Codex finished"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/device-key-from-url" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		var payload map[string]interface{}
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if _, ok := payload["device_key"]; ok {
+			t.Fatalf("device_key should be omitted when it is embedded in BARK_URL: %#v", payload)
+		}
+		if payload["body"] != text {
+			t.Fatalf("unexpected body: %q", payload["body"])
+		}
+
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	cfg := Config{BarkURL: server.URL + "/device-key-from-url"}
+	if err := sendBark(cfg, text); err != nil {
+		t.Fatalf("sendBark returned error: %v", err)
 	}
 }
 

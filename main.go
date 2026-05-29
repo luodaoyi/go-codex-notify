@@ -23,6 +23,10 @@ type Config struct {
 	OpeniLinkHubToken   string `json:"openilink_hub_token"`
 	HermesWebhookURL    string `json:"hermes_webhook_url"`
 	HermesWebhookSecret string `json:"hermes_webhook_secret"`
+	BarkServerURL       string `json:"bark_server_url"`
+	BarkURL             string `json:"bark_url"`
+	BarkDeviceKey       string `json:"bark_device_key"`
+	BarkTitle           string `json:"bark_title"`
 }
 
 type NotifyPayload struct {
@@ -46,17 +50,16 @@ type NotifyPayload struct {
 }
 
 type GoalContext struct {
-	Objective      string `json:"objective,omitempty"`
-	Status         string `json:"status,omitempty"`
-	TokenBudget    string `json:"token_budget,omitempty"`
-	TokensUsed     string `json:"tokens_used,omitempty"`
-	TimeUsed       string `json:"time_used,omitempty"`
-	CreatedAt      string `json:"created_at,omitempty"`
-	UpdatedAt      string `json:"updated_at,omitempty"`
-	ThreadID       string `json:"thread_id,omitempty"`
-	TurnID         string `json:"turn_id,omitempty"`
+	Objective   string `json:"objective,omitempty"`
+	Status      string `json:"status,omitempty"`
+	TokenBudget string `json:"token_budget,omitempty"`
+	TokensUsed  string `json:"tokens_used,omitempty"`
+	TimeUsed    string `json:"time_used,omitempty"`
+	CreatedAt   string `json:"created_at,omitempty"`
+	UpdatedAt   string `json:"updated_at,omitempty"`
+	ThreadID    string `json:"thread_id,omitempty"`
+	TurnID      string `json:"turn_id,omitempty"`
 }
-
 
 type TelegramRequest struct {
 	ChatID string `json:"chat_id"`
@@ -67,20 +70,27 @@ type OpeniLinkRequest struct {
 	Content string `json:"content"`
 }
 
+type BarkRequest struct {
+	Title     string `json:"title,omitempty"`
+	Body      string `json:"body"`
+	DeviceKey string `json:"device_key,omitempty"`
+	Group     string `json:"group,omitempty"`
+}
+
 type HermesWebhookRequest struct {
-	EventType            string `json:"event_type"`
-	Message              string `json:"message"`
-	Client               string `json:"client,omitempty"`
-	HookEventName        string `json:"hook_event_name,omitempty"`
-	SessionID            string `json:"session_id,omitempty"`
-	TurnID               string `json:"turn_id,omitempty"`
-	CWD                  string `json:"cwd,omitempty"`
-	TranscriptPath       string `json:"transcript_path,omitempty"`
-	Model                string `json:"model,omitempty"`
-	PermissionMode       string `json:"permission_mode,omitempty"`
-	LastAssistantMessage string `json:"last_assistant_message,omitempty"`
-	ToolName             string `json:"tool_name,omitempty"`
-	ToolUseID            string `json:"tool_use_id,omitempty"`
+	EventType            string      `json:"event_type"`
+	Message              string      `json:"message"`
+	Client               string      `json:"client,omitempty"`
+	HookEventName        string      `json:"hook_event_name,omitempty"`
+	SessionID            string      `json:"session_id,omitempty"`
+	TurnID               string      `json:"turn_id,omitempty"`
+	CWD                  string      `json:"cwd,omitempty"`
+	TranscriptPath       string      `json:"transcript_path,omitempty"`
+	Model                string      `json:"model,omitempty"`
+	PermissionMode       string      `json:"permission_mode,omitempty"`
+	LastAssistantMessage string      `json:"last_assistant_message,omitempty"`
+	ToolName             string      `json:"tool_name,omitempty"`
+	ToolUseID            string      `json:"tool_use_id,omitempty"`
 	Goal                 GoalContext `json:"goal,omitempty"`
 }
 
@@ -108,6 +118,10 @@ func loadConfig() (Config, error) {
 		OpeniLinkHubToken:   strings.TrimSpace(os.Getenv("OPENILINK_HUB_TOKEN")),
 		HermesWebhookURL:    strings.TrimSpace(os.Getenv("HERMES_WEBHOOK_URL")),
 		HermesWebhookSecret: strings.TrimSpace(os.Getenv("HERMES_WEBHOOK_SECRET")),
+		BarkServerURL:       strings.TrimSpace(os.Getenv("BARK_SERVER_URL")),
+		BarkURL:             strings.TrimSpace(os.Getenv("BARK_URL")),
+		BarkDeviceKey:       strings.TrimSpace(os.Getenv("BARK_DEVICE_KEY")),
+		BarkTitle:           strings.TrimSpace(os.Getenv("BARK_TITLE")),
 	}
 
 	configPath := strings.TrimSpace(os.Getenv("CODEX_NOTIFY_CONFIG"))
@@ -137,6 +151,18 @@ func loadConfig() (Config, error) {
 			}
 			if cfg.HermesWebhookSecret == "" {
 				cfg.HermesWebhookSecret = strings.TrimSpace(fileCfg.HermesWebhookSecret)
+			}
+			if cfg.BarkServerURL == "" {
+				cfg.BarkServerURL = strings.TrimSpace(fileCfg.BarkServerURL)
+			}
+			if cfg.BarkURL == "" {
+				cfg.BarkURL = strings.TrimSpace(fileCfg.BarkURL)
+			}
+			if cfg.BarkDeviceKey == "" {
+				cfg.BarkDeviceKey = strings.TrimSpace(fileCfg.BarkDeviceKey)
+			}
+			if cfg.BarkTitle == "" {
+				cfg.BarkTitle = strings.TrimSpace(fileCfg.BarkTitle)
 			}
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return Config{}, fmt.Errorf("read config file %s: %w", configPath, err)
@@ -340,13 +366,13 @@ func enrichGoalFromTranscript(payload *NotifyPayload) error {
 		payload.Goal = GoalContext{
 			Objective:   firstString(goalMap, "objective"),
 			Status:      firstString(goalMap, "status"),
-			TokenBudget:  firstString(goalMap, "tokenBudget", "token_budget"),
-			TokensUsed:   firstString(goalMap, "tokensUsed", "tokens_used"),
-			TimeUsed:     firstString(goalMap, "timeUsedSeconds", "time_used_seconds"),
-			CreatedAt:    firstString(goalMap, "createdAt", "created_at"),
-			UpdatedAt:    firstString(goalMap, "updatedAt", "updated_at"),
-			ThreadID:     firstString(goalMap, "threadId", "thread_id"),
-			TurnID:       firstString(params, "turnId", "turn_id"),
+			TokenBudget: firstString(goalMap, "tokenBudget", "token_budget"),
+			TokensUsed:  firstString(goalMap, "tokensUsed", "tokens_used"),
+			TimeUsed:    firstString(goalMap, "timeUsedSeconds", "time_used_seconds"),
+			CreatedAt:   firstString(goalMap, "createdAt", "created_at"),
+			UpdatedAt:   firstString(goalMap, "updatedAt", "updated_at"),
+			ThreadID:    firstString(goalMap, "threadId", "thread_id"),
+			TurnID:      firstString(params, "turnId", "turn_id"),
 		}
 		if payload.Goal.ThreadID == "" {
 			payload.Goal.ThreadID = firstString(params, "threadId", "thread_id")
@@ -425,6 +451,52 @@ func sendOpeniLinkHub(cfg Config, text string) error {
 	return nil
 }
 
+func sendBark(cfg Config, text string) error {
+	title := cfg.BarkTitle
+	if title == "" {
+		title = "Codex 任务已完成"
+	}
+	body, err := json.Marshal(BarkRequest{
+		Title:     title,
+		Body:      text,
+		DeviceKey: cfg.BarkDeviceKey,
+		Group:     "Codex",
+	})
+	if err != nil {
+		return err
+	}
+
+	pushURL := barkPushURL(cfg)
+	req, err := http.NewRequest(http.MethodPost, pushURL, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("bark api %s: %s", resp.Status, strings.TrimSpace(string(respBody)))
+	}
+	return nil
+}
+
+func barkPushURL(cfg Config) string {
+	if cfg.BarkURL != "" {
+		return cfg.BarkURL
+	}
+	serverURL := cfg.BarkServerURL
+	if serverURL == "" {
+		serverURL = "https://api.day.app"
+	}
+	return strings.TrimRight(serverURL, "/") + "/push"
+}
+
 func sendHermesWebhook(cfg Config, text string, payload NotifyPayload) error {
 	body, err := json.Marshal(HermesWebhookRequest{
 		EventType:            "codex_notify",
@@ -486,6 +558,12 @@ func sendNotifications(cfg Config, text string, payload NotifyPayload) error {
 	if cfg.OpeniLinkHubURL != "" && cfg.OpeniLinkHubToken != "" {
 		if err := sendOpeniLinkHub(cfg, text); err != nil {
 			errs = append(errs, "openilink hub: "+err.Error())
+		}
+	}
+
+	if cfg.BarkURL != "" || cfg.BarkDeviceKey != "" {
+		if err := sendBark(cfg, text); err != nil {
+			errs = append(errs, "bark: "+err.Error())
 		}
 	}
 

@@ -10,7 +10,7 @@
 
 这是一个给 Codex 发完成通知的小工具。
 
-你把它接到 Codex 的完成钩子上后，任务停下来的时候，它会自动把结果发到你常用的地方，比如 Telegram、OpeniLink Hub，或者你自己的 Hermes Webhook。
+你把它接到 Codex 的完成钩子上后，任务停下来的时候，它会自动把结果发到你常用的地方，比如 Telegram、Bark、OpeniLink Hub，或者你自己的 Hermes Webhook。
 
 它是通知型 hook：成功时不会向 stdout 输出内容，避免 Codex 把通知工具的输出误当成下一轮上下文。
 
@@ -79,6 +79,31 @@ export TELEGRAM_CHAT_ID="123456789"
 export OPENILINK_HUB_URL="https://hub.011f.com/bot/v1/message/send"
 export OPENILINK_HUB_TOKEN="app_xxxxxxxxxxxxxxxxxxxx"
 ```
+
+#### Bark
+
+最简单的配置只需要 Bark 里的设备 Key。默认会发到 `https://api.day.app/push`：
+
+```bash
+export BARK_DEVICE_KEY="your-bark-device-key"
+```
+
+如果你使用自建 Bark 服务器，可以指定服务器地址。工具会自动请求 `${BARK_SERVER_URL}/push`：
+
+```bash
+export BARK_SERVER_URL="https://bark.example.com"
+export BARK_DEVICE_KEY="your-bark-device-key"
+```
+
+如果你的 Bark 服务挂在自定义路径、反向代理路径，或者你想直接使用 Bark App 里复制出来的完整推送地址，也可以用 `BARK_URL` 覆盖完整请求地址：
+
+```bash
+export BARK_URL="https://bark.example.com/your-bark-device-key"
+```
+
+`BARK_URL` 优先级高于 `BARK_SERVER_URL`。如果 `BARK_URL` 已经包含设备 Key，不需要再设置 `BARK_DEVICE_KEY`；如果 `BARK_URL` 是 `/push` 地址，则仍然需要设置 `BARK_DEVICE_KEY`。
+
+`BARK_TITLE` 可选；不设置时默认标题是 `Codex 任务已完成`。
 
 #### Hermes Webhook
 
@@ -183,6 +208,10 @@ export CODEX_NOTIFY_CONFIG="/path/to/notify-telegram.json"
   "chat_id": "123456789",
   "openilink_hub_url": "https://hub.011f.com/bot/v1/message/send",
   "openilink_hub_token": "app_xxxxxxxxxxxxxxxxxxxx",
+  "bark_server_url": "https://api.day.app",
+  "bark_url": "",
+  "bark_device_key": "your-bark-device-key",
+  "bark_title": "Codex 任务已完成",
   "hermes_webhook_url": "https://your-server:8644/webhooks/codex-notify",
   "hermes_webhook_secret": "your-hermes-webhook-secret"
 }
