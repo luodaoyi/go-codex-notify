@@ -24,9 +24,6 @@ type Config struct {
 	HermesWebhookURL    string `json:"hermes_webhook_url"`
 	HermesWebhookSecret string `json:"hermes_webhook_secret"`
 	BarkServerURL       string `json:"bark_server_url"`
-	BarkURL             string `json:"bark_url"`
-	BarkDeviceKey       string `json:"bark_device_key"`
-	BarkTitle           string `json:"bark_title"`
 }
 
 type NotifyPayload struct {
@@ -71,10 +68,9 @@ type OpeniLinkRequest struct {
 }
 
 type BarkRequest struct {
-	Title     string `json:"title,omitempty"`
-	Body      string `json:"body"`
-	DeviceKey string `json:"device_key,omitempty"`
-	Group     string `json:"group,omitempty"`
+	Title string `json:"title,omitempty"`
+	Body  string `json:"body"`
+	Group string `json:"group,omitempty"`
 }
 
 type HermesWebhookRequest struct {
@@ -119,9 +115,6 @@ func loadConfig() (Config, error) {
 		HermesWebhookURL:    strings.TrimSpace(os.Getenv("HERMES_WEBHOOK_URL")),
 		HermesWebhookSecret: strings.TrimSpace(os.Getenv("HERMES_WEBHOOK_SECRET")),
 		BarkServerURL:       strings.TrimSpace(os.Getenv("BARK_SERVER_URL")),
-		BarkURL:             strings.TrimSpace(os.Getenv("BARK_URL")),
-		BarkDeviceKey:       strings.TrimSpace(os.Getenv("BARK_DEVICE_KEY")),
-		BarkTitle:           strings.TrimSpace(os.Getenv("BARK_TITLE")),
 	}
 
 	configPath := strings.TrimSpace(os.Getenv("CODEX_NOTIFY_CONFIG"))
@@ -154,15 +147,6 @@ func loadConfig() (Config, error) {
 			}
 			if cfg.BarkServerURL == "" {
 				cfg.BarkServerURL = strings.TrimSpace(fileCfg.BarkServerURL)
-			}
-			if cfg.BarkURL == "" {
-				cfg.BarkURL = strings.TrimSpace(fileCfg.BarkURL)
-			}
-			if cfg.BarkDeviceKey == "" {
-				cfg.BarkDeviceKey = strings.TrimSpace(fileCfg.BarkDeviceKey)
-			}
-			if cfg.BarkTitle == "" {
-				cfg.BarkTitle = strings.TrimSpace(fileCfg.BarkTitle)
 			}
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return Config{}, fmt.Errorf("read config file %s: %w", configPath, err)
@@ -452,22 +436,16 @@ func sendOpeniLinkHub(cfg Config, text string) error {
 }
 
 func sendBark(cfg Config, text string) error {
-	title := cfg.BarkTitle
-	if title == "" {
-		title = "Codex 任务已完成"
-	}
 	body, err := json.Marshal(BarkRequest{
-		Title:     title,
-		Body:      text,
-		DeviceKey: cfg.BarkDeviceKey,
-		Group:     "Codex",
+		Title: "Codex 任务已完成",
+		Body:  text,
+		Group: "Codex",
 	})
 	if err != nil {
 		return err
 	}
 
-	pushURL := barkPushURL(cfg)
-	req, err := http.NewRequest(http.MethodPost, pushURL, bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, cfg.BarkServerURL, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -484,20 +462,6 @@ func sendBark(cfg Config, text string) error {
 		return fmt.Errorf("bark api %s: %s", resp.Status, strings.TrimSpace(string(respBody)))
 	}
 	return nil
-}
-
-func barkPushURL(cfg Config) string {
-	if cfg.BarkURL != "" {
-		return cfg.BarkURL
-	}
-	serverURL := cfg.BarkServerURL
-	if serverURL == "" {
-		serverURL = "https://api.day.app"
-	}
-	if cfg.BarkDeviceKey == "" {
-		return strings.TrimRight(serverURL, "/")
-	}
-	return strings.TrimRight(serverURL, "/") + "/push"
 }
 
 func sendHermesWebhook(cfg Config, text string, payload NotifyPayload) error {
@@ -564,7 +528,7 @@ func sendNotifications(cfg Config, text string, payload NotifyPayload) error {
 		}
 	}
 
-	if cfg.BarkURL != "" || cfg.BarkDeviceKey != "" || cfg.BarkServerURL != "" {
+	if cfg.BarkServerURL != "" {
 		if err := sendBark(cfg, text); err != nil {
 			errs = append(errs, "bark: "+err.Error())
 		}
