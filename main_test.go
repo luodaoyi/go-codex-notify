@@ -34,6 +34,46 @@ func TestReadPayloadReturnsEmptyOnTTYLikeInput(t *testing.T) {
 	}
 }
 
+func TestReadPayloadReadsCodexNotifyArg(t *testing.T) {
+	oldStdin := os.Stdin
+	oldArgs := os.Args
+	defer func() {
+		os.Stdin = oldStdin
+		os.Args = oldArgs
+	}()
+
+	f, err := os.OpenFile(os.DevNull, os.O_RDONLY, 0)
+	if err != nil {
+		t.Fatalf("open null device: %v", err)
+	}
+	defer f.Close()
+	os.Stdin = f
+	os.Args = []string{"go-codex-notify", `{"type":"agent-turn-complete","thread-id":"thread-123","turn-id":"turn-456","cwd":"D:\\sources\\repos-new\\gh\\go-codex-notify","input-messages":["修复 Bark 通知","确认 Plan Mode notify"],"last-assistant-message":"已完成本机测试"}`}
+
+	payload, raw := readPayload()
+	if raw == "" {
+		t.Fatal("expected raw input from command-line notify payload")
+	}
+	if payload.Event != "agent-turn-complete" {
+		t.Fatalf("unexpected event: %q", payload.Event)
+	}
+	if payload.SessionID != "thread-123" {
+		t.Fatalf("unexpected session id: %q", payload.SessionID)
+	}
+	if payload.TurnID != "turn-456" {
+		t.Fatalf("unexpected turn id: %q", payload.TurnID)
+	}
+	if payload.CWD != `D:\sources\repos-new\gh\go-codex-notify` {
+		t.Fatalf("unexpected cwd: %q", payload.CWD)
+	}
+	if len(payload.InputMessages) != 2 || payload.InputMessages[0] != "修复 Bark 通知" {
+		t.Fatalf("unexpected input messages: %#v", payload.InputMessages)
+	}
+	if payload.LastAssistantMessage != "已完成本机测试" {
+		t.Fatalf("unexpected last assistant message: %q", payload.LastAssistantMessage)
+	}
+}
+
 func TestLoadConfigReadsJsonFile(t *testing.T) {
 	t.Setenv("TELEGRAM_BOT_TOKEN", "")
 	t.Setenv("TELEGRAM_CHAT_ID", "")
@@ -134,6 +174,9 @@ func TestBuildMessageIncludesCodexStopHookContext(t *testing.T) {
 	}
 
 	msg := buildMessage(payload, "")
+	if !strings.HasPrefix(msg, "父亲，Codex 任务已完成。") {
+		t.Fatalf("unexpected headline:\n%s", msg)
+	}
 	for _, want := range []string{
 		"客户端：codex-tui",
 		"会话：session-123",
@@ -152,6 +195,48 @@ func TestBuildMessageIncludesCodexStopHookContext(t *testing.T) {
 	for _, unwanted := range []string{"Hook：", "时间：", "机器：", "目录名：", "完整路径：", "Git 根目录：", "Git 分支：", "最近提交：", "工作区状态：", "任务：", "原始输入："} {
 		if strings.Contains(msg, unwanted) {
 			t.Fatalf("message should not include %q for parsed lifecycle payload:\n%s", unwanted, msg)
+		}
+	}
+}
+
+func TestBuildMessageUsesAttentionHeadlineForNotifyPayload(t *testing.T) {
+	payload := NotifyPayload{
+		Event:          "user-interaction-required",
+		Message:        "Plan Mode 等待用户输入",
+		PermissionMode: "plan",
+	}
+
+	msg := buildMessage(payload, "")
+	if !strings.HasPrefix(msg, "父亲，Codex 需要你继续处理。") {
+		t.Fatalf("unexpected headline:\n%s", msg)
+	}
+	if strings.Contains(msg, "父亲，Codex 任务已完成。") {
+		t.Fatalf("attention notification must not look like a completion:\n%s", msg)
+	}
+}
+
+func TestBuildMessageIncludesCodexNotifyContext(t *testing.T) {
+	payload := NotifyPayload{
+		Event:                "agent-turn-complete",
+		SessionID:            "thread-123",
+		TurnID:               "turn-456",
+		CWD:                  `D:\sources\repos-new\gh\go-codex-notify`,
+		InputMessages:        []string{"修复 Bark 通知", "确认 Plan Mode notify"},
+		LastAssistantMessage: "已完成本机测试",
+	}
+
+	msg := buildMessage(payload, "")
+	for _, want := range []string{
+		"父亲，Codex 任务已完成。",
+		"事件：agent-turn-complete",
+		"会话：thread-123",
+		"轮次：turn-456",
+		`项目目录：D:\sources\repos-new\gh\go-codex-notify`,
+		"用户输入：修复 Bark 通知 / 确认 Plan Mode notify",
+		"Codex 回应：已完成本机测试",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("message missing %q:\n%s", want, msg)
 		}
 	}
 }
@@ -239,7 +324,34 @@ func TestSendBarkPostsNotificationPayload(t *testing.T) {
 	defer server.Close()
 
 	cfg := Config{BarkServerURL: server.URL + "/device-key-from-server-url"}
-	if err := sendBark(cfg, text); err != nil {
+	if err := sendBark(cfg, text, NotifyPayload{}); err != nil {
+		t.Fatalf("sendBark returned error: %v", err)
+	}
+}
+
+func TestSendBarkUsesAttentionTitleForNotifyPayload(t *testing.T) {
+	const text = "Codex needs input"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		var payload map[string]interface{}
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if payload["title"] != "Codex 需要你继续处理" {
+			t.Fatalf("unexpected title: %q", payload["title"])
+		}
+
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	cfg := Config{BarkServerURL: server.URL + "/device-key-from-server-url"}
+	payload := NotifyPayload{Event: "user-interaction-required", Message: "Plan Mode 等待用户输入"}
+	if err := sendBark(cfg, text, payload); err != nil {
 		t.Fatalf("sendBark returned error: %v", err)
 	}
 }
@@ -350,6 +462,10 @@ func TestSendHermesWebhookIncludesStructuredCodexContext(t *testing.T) {
 		if payload["last_assistant_message"] != "done" {
 			t.Fatalf("unexpected last_assistant_message: %q", payload["last_assistant_message"])
 		}
+		inputMessages, ok := payload["input_messages"].([]interface{})
+		if !ok || len(inputMessages) != 1 || inputMessages[0] != "ship it" {
+			t.Fatalf("unexpected input_messages: %#v", payload["input_messages"])
+		}
 		goal, ok := payload["goal"].(map[string]interface{})
 		if !ok {
 			t.Fatalf("expected structured goal payload, got %#v", payload["goal"])
@@ -368,6 +484,7 @@ func TestSendHermesWebhookIncludesStructuredCodexContext(t *testing.T) {
 		SessionID:            "session-123",
 		Model:                "gpt-5.1-codex-max",
 		LastAssistantMessage: "done",
+		InputMessages:        []string{"ship it"},
 		Goal: GoalContext{
 			Objective: "ship it",
 			Status:    "active",

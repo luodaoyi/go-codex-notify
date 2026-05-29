@@ -8,18 +8,18 @@
 [![node](https://img.shields.io/node/v/go-codex-notify?logo=nodedotjs)](https://www.npmjs.com/package/go-codex-notify)
 [![license](https://img.shields.io/github/license/luodaoyi/go-codex-notify)](./LICENSE)
 
-这是一个给 Codex 发完成通知的小工具。
+这是一个给 Codex 发通知的小工具，覆盖任务完成、等待审批、等待你继续对话等场景。
 
-你把它接到 Codex 的完成钩子上后，任务停下来的时候，它会自动把结果发到你常用的地方，比如 Telegram、Bark、OpeniLink Hub，或者你自己的 Hermes Webhook。
+你把它接到 Codex 的 `notify` 上后，Codex 需要你处理或任务结束时，它会自动把消息发到你常用的地方，比如 Telegram、Bark、OpeniLink Hub，或者你自己的 Hermes Webhook。
 
-它是通知型 hook：成功时不会向 stdout 输出内容，避免 Codex 把通知工具的输出误当成下一轮上下文。
+它是通知型工具：成功时不会向 stdout 输出内容，避免 Codex 把通知工具的输出误当成下一轮上下文。
 
 ## 你会收到什么
 
 默认会发一段中文通知，大致长这样：
 
 ```text
-父亲，Codex 任务已完成。
+父亲，Codex 需要你继续处理。
 
 客户端：codex-tui
 会话：...
@@ -37,6 +37,8 @@
 Codex 回应：...
 ```
 
+任务真正结束时，开头会变成 `父亲，Codex 任务已完成。`。
+
 如果这次任务里设置了 goal，通知里还会自动带上目标摘要。
 
 ## 怎么用
@@ -46,7 +48,7 @@ Codex 回应：...
 推荐直接运行：
 
 ```bash
-npx -y go-codex-notify
+npx -y go-codex-notify@latest
 ```
 
 也可以全局安装：
@@ -60,7 +62,7 @@ npm install -g go-codex-notify
 - macOS / Linux：`~/.codex/bin/go-codex-notify`
 - Windows：`C:\Users\你的用户名\.codex\bin\go-codex-notify.exe`
 
-后面的 Codex 配置统一建议指向这个固定路径，不再直接依赖 `npx` 或 `*.cmd`。
+Codex 里推荐直接用 `npx -y go-codex-notify@latest`，配置最少；如果你想完全避免 `npx` 启动开销，也可以改用上面的稳定二进制路径。
 
 ### 2）配置通知渠道
 
@@ -107,66 +109,41 @@ Codex 配置写在：
 ~/.codex/config.toml
 ```
 
-#### 新版 Codex hooks：macOS / Linux
+#### 推荐配置：只使用 notify
 
-优先使用安装脚本写入的稳定路径：
+`notify` 是 Codex 官方的通知命令入口，例如 Plan Mode 中途停下来等你继续对话、等待审批、任务完成等需要提醒你的场景。这个工具只需要配置这一项，不需要再额外配置 `hooks.Stop`。
 
-```toml
-[features]
-codex_hooks = true
-
-[[hooks.Stop]]
-
-[[hooks.Stop.hooks]]
-type = "command"
-command = "/Users/你的用户名/.codex/bin/go-codex-notify"
-timeout = 30
-statusMessage = "Sending notification"
-```
-
-如果你更喜欢自己管理路径，也可以改成你机器上的实际绝对路径。
-
-#### 新版 Codex hooks：Windows
-
-Windows 上同样建议直接写稳定路径，不要把 `npx.cmd`、`.cmd` 或整条命令字符串塞进 `command`。`hooks.Stop.hooks` 在 Windows 下更稳的方式就是直接指向原生 `.exe`：
+Windows：
 
 ```toml
-[features]
-codex_hooks = true
-
-[[hooks.Stop]]
-
-[[hooks.Stop.hooks]]
-type = "command"
-command = 'C:\Users\你的用户名\.codex\bin\go-codex-notify.exe'
-timeout = 30
-statusMessage = "Sending notification"
+notify = ['C:\Program Files\nodejs\npx.cmd', '-y', 'go-codex-notify@latest']
 ```
 
-注意不要写成 `[[hooks]]`，否则 Codex 会报：`invalid type: sequence, expected struct HooksToml in hooks`。`hooks` 本身是普通表，只有 `hooks.Stop` 和 `hooks.Stop.hooks` 是数组表。
+macOS / Linux：
 
-新版 Stop hook 会通过 stdin 传入 JSON，例如 `session_id`、`turn_id`、`transcript_path`、`cwd`、`model`、`permission_mode` 和 `last_assistant_message`。`go-codex-notify` 会原样读取这些字段；成功时 stdout 为空，只在失败时向 stderr 写错误并返回非零退出码。
+```toml
+notify = ["npx", "-y", "go-codex-notify@latest"]
+```
+
+`notify` 必须写在用户级 `~/.codex/config.toml` 顶层，不要写到项目内 `.codex/config.toml`。不要再配置 `hooks.Stop`，否则可能在任务结束时收到重复通知。
+
+#### notify 能拿到哪些上下文
+
+Codex 官方 `notify` payload 当前常见字段包括：
+
+- `type`：通知类型，当前主要是 `agent-turn-complete`
+- `thread-id`：会话标识，会在通知里显示为“会话”
+- `turn-id`：轮次标识，会在通知里显示为“轮次”
+- `cwd`：当前工作目录，会在通知里显示为“项目目录”
+- `input-messages`：触发本轮的用户输入，会在通知里显示为“用户输入”
+- `last-assistant-message`：Codex 最后一条回复，会在通知里显示为“Codex 回应”
+
+`notify` 不保证提供会话显示名称/title，也不提供 hook 里的 `transcript_path`。如果需要完整 transcript 路径，只能用 lifecycle hooks；如果只是为了知道哪个项目、哪个会话、用户问了什么，`notify` 已经够用。
 
 如果你想手动刷新这个稳定路径，可以重新执行一次：
 
 ```bash
 node scripts/install.js
-```
-
-#### 旧版 Codex notify
-
-如果你的 Codex 还不支持 hooks，才用旧的 `notify` 写法。这里也建议直接指向同一个稳定路径：
-
-```toml
-notify = ["/Users/你的用户名/.codex/bin/go-codex-notify"]
-```
-
-Windows 旧版 `notify` 可以写成：
-
-```toml
-notify = [
-    'C:\Users\你的用户名\.codex\bin\go-codex-notify.exe',
-]
 ```
 
 ## 配置文件
@@ -210,7 +187,6 @@ export CODEX_NOTIFY_CONFIG="/path/to/notify-telegram.json"
   "event_type": "codex_notify",
   "message": "渲染后的中文通知正文",
   "client": "codex-tui",
-  "hook_event_name": "Stop",
   "session_id": "...",
   "turn_id": "...",
   "cwd": "...",
@@ -238,6 +214,6 @@ export CODEX_NOTIFY_CONFIG="/path/to/notify-telegram.json"
 
 ## 兼容性说明
 
-- 新版 Codex：优先使用 `[features] codex_hooks = true` 和 `[[hooks.Stop]]` / `[[hooks.Stop.hooks]]`
-- 旧版 Codex：继续使用 `notify = [...]`
+- Codex 通知入口：使用顶层 `notify = [...]`
+- 工具仍兼容 stdin JSON 输入，方便手动测试或已有集成迁移
 - 多个通知通道同时配置时，会一起发送

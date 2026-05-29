@@ -40,6 +40,7 @@ type NotifyPayload struct {
 	Model                string                 `json:"model,omitempty"`
 	PermissionMode       string                 `json:"permission_mode,omitempty"`
 	LastAssistantMessage string                 `json:"last_assistant_message,omitempty"`
+	InputMessages        []string               `json:"input_messages,omitempty"`
 	ToolName             string                 `json:"tool_name,omitempty"`
 	ToolUseID            string                 `json:"tool_use_id,omitempty"`
 	Goal                 GoalContext            `json:"goal,omitempty"`
@@ -85,6 +86,7 @@ type HermesWebhookRequest struct {
 	Model                string      `json:"model,omitempty"`
 	PermissionMode       string      `json:"permission_mode,omitempty"`
 	LastAssistantMessage string      `json:"last_assistant_message,omitempty"`
+	InputMessages        []string    `json:"input_messages,omitempty"`
 	ToolName             string      `json:"tool_name,omitempty"`
 	ToolUseID            string      `json:"tool_use_id,omitempty"`
 	Goal                 GoalContext `json:"goal,omitempty"`
@@ -170,18 +172,35 @@ func loadConfigFile(path string) (Config, error) {
 
 func readPayload() (NotifyPayload, string) {
 	stat, err := os.Stdin.Stat()
-	if err != nil {
-		return NotifyPayload{}, ""
-	}
-	if (stat.Mode() & os.ModeCharDevice) != 0 {
-		return NotifyPayload{}, ""
-	}
-
-	b, err := io.ReadAll(os.Stdin)
-	if err != nil || len(bytes.TrimSpace(b)) == 0 {
-		return NotifyPayload{}, ""
+	if err == nil && (stat.Mode()&os.ModeCharDevice) == 0 {
+		b, readErr := io.ReadAll(os.Stdin)
+		if readErr == nil && len(bytes.TrimSpace(b)) > 0 {
+			return parsePayloadBytes(b)
+		}
 	}
 
+	if argPayload := payloadFromArgs(os.Args[1:]); argPayload != "" {
+		return parsePayloadBytes([]byte(argPayload))
+	}
+
+	return NotifyPayload{}, ""
+}
+
+func payloadFromArgs(args []string) string {
+	if len(args) == 0 {
+		return ""
+	}
+	first := strings.TrimSpace(args[0])
+	if first == "" || strings.HasPrefix(first, "-") {
+		return ""
+	}
+	if strings.HasPrefix(first, "{") || strings.HasPrefix(first, "[") || len(args) == 1 {
+		return strings.TrimSpace(strings.Join(args, " "))
+	}
+	return ""
+}
+
+func parsePayloadBytes(b []byte) (NotifyPayload, string) {
 	rawInput := strings.TrimSpace(string(b))
 
 	var raw map[string]interface{}
@@ -191,20 +210,21 @@ func readPayload() (NotifyPayload, string) {
 
 	payload := NotifyPayload{Raw: raw}
 	payload.Client = firstString(raw, "client")
-	payload.Task = firstString(raw, "task", "title", "session", "thread")
+	payload.Task = firstString(raw, "task", "title", "session", "thread", "objective")
 	payload.Status = firstString(raw, "status", "state", "result")
-	payload.Message = firstString(raw, "message", "summary", "text")
-	payload.Event = firstString(raw, "event", "type", "hook_event_name")
-	payload.HookEventName = firstString(raw, "hook_event_name")
-	payload.SessionID = firstString(raw, "session_id")
-	payload.TurnID = firstString(raw, "turn_id")
+	payload.Message = firstString(raw, "message", "summary", "text", "body", "reason")
+	payload.Event = firstString(raw, "event", "type", "kind", "hook_event_name", "hookEventName", "hook-event-name")
+	payload.HookEventName = firstString(raw, "hook_event_name", "hookEventName", "hook-event-name")
+	payload.SessionID = firstString(raw, "session_id", "sessionId", "session-id", "thread-id", "thread_id", "threadId")
+	payload.TurnID = firstString(raw, "turn_id", "turnId", "turn-id")
 	payload.CWD = firstString(raw, "cwd")
-	payload.TranscriptPath = firstString(raw, "transcript_path")
+	payload.TranscriptPath = firstString(raw, "transcript_path", "transcriptPath", "transcript-path")
 	payload.Model = firstString(raw, "model")
-	payload.PermissionMode = firstString(raw, "permission_mode")
-	payload.LastAssistantMessage = firstString(raw, "last_assistant_message")
-	payload.ToolName = firstString(raw, "tool_name")
-	payload.ToolUseID = firstString(raw, "tool_use_id")
+	payload.PermissionMode = firstString(raw, "permission_mode", "permissionMode", "permission-mode")
+	payload.LastAssistantMessage = firstString(raw, "last_assistant_message", "lastAssistantMessage", "last-assistant-message")
+	payload.InputMessages = firstStringSlice(raw, "input_messages", "inputMessages", "input-messages")
+	payload.ToolName = firstString(raw, "tool_name", "toolName", "tool-name")
+	payload.ToolUseID = firstString(raw, "tool_use_id", "toolUseId", "tool-use-id")
 	return payload, rawInput
 }
 
@@ -233,9 +253,54 @@ func firstString(m map[string]interface{}, keys ...string) string {
 	return ""
 }
 
+func firstStringSlice(m map[string]interface{}, keys ...string) []string {
+	for _, k := range keys {
+		v, ok := m[k]
+		if !ok {
+			continue
+		}
+		switch t := v.(type) {
+		case []string:
+			return cleanStrings(t)
+		case []interface{}:
+			var values []string
+			for _, item := range t {
+				switch s := item.(type) {
+				case string:
+					values = append(values, s)
+				case json.Number:
+					values = append(values, s.String())
+				case float64:
+					values = append(values, strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.0f", s), "0"), "."))
+				case bool:
+					if s {
+						values = append(values, "true")
+					} else {
+						values = append(values, "false")
+					}
+				}
+			}
+			return cleanStrings(values)
+		case string:
+			return cleanStrings([]string{t})
+		}
+	}
+	return nil
+}
+
+func cleanStrings(values []string) []string {
+	var cleaned []string
+	for _, value := range values {
+		if s := strings.TrimSpace(value); s != "" {
+			cleaned = append(cleaned, s)
+		}
+	}
+	return cleaned
+}
+
 func buildMessage(payload NotifyPayload, rawInput string) string {
 	var sb strings.Builder
-	sb.WriteString("父亲，Codex 任务已完成。\n\n")
+	sb.WriteString(notificationHeadline(payload) + "\n\n")
 
 	if payload.Client != "" {
 		sb.WriteString("客户端：" + payload.Client + "\n")
@@ -292,6 +357,9 @@ func buildMessage(payload NotifyPayload, rawInput string) string {
 	if payload.Task != "" {
 		sb.WriteString("任务：" + payload.Task + "\n")
 	}
+	if len(payload.InputMessages) > 0 {
+		sb.WriteString("用户输入：" + formatInputMessages(payload.InputMessages) + "\n")
+	}
 	if payload.Status != "" {
 		sb.WriteString("状态：" + payload.Status + "\n")
 	}
@@ -309,8 +377,81 @@ func buildMessage(payload NotifyPayload, rawInput string) string {
 	return strings.TrimSpace(sb.String())
 }
 
+func formatInputMessages(messages []string) string {
+	const maxMessages = 3
+	const maxRunes = 500
+
+	display := messages
+	if len(display) > maxMessages {
+		display = display[:maxMessages]
+	}
+	result := strings.Join(display, " / ")
+	if len(messages) > maxMessages {
+		result += fmt.Sprintf(" / ...(+%d)", len(messages)-maxMessages)
+	}
+	return truncateRunes(result, maxRunes)
+}
+
+func truncateRunes(s string, limit int) string {
+	if limit <= 0 {
+		return ""
+	}
+	runes := []rune(s)
+	if len(runes) <= limit {
+		return s
+	}
+	return string(runes[:limit]) + "..."
+}
+
+func notificationHeadline(payload NotifyPayload) string {
+	eventText := strings.ToLower(strings.Join([]string{
+		payload.HookEventName,
+		payload.Event,
+		payload.Status,
+		payload.Message,
+	}, " "))
+
+	if strings.EqualFold(payload.HookEventName, "Stop") ||
+		strings.EqualFold(payload.Event, "Stop") ||
+		containsAny(eventText, "turn-complete", "turn_complete", "completed", "finished", "done") {
+		return "父亲，Codex 任务已完成。"
+	}
+
+	if containsAny(eventText, "permission", "approval", "approve", "审批", "批准", "权限") {
+		return "父亲，Codex 等待你审批。"
+	}
+
+	if containsAny(eventText, "input", "interaction", "question", "prompt", "waiting", "resume", "continue", "继续", "对话", "处理") {
+		return "父亲，Codex 需要你继续处理。"
+	}
+
+	if strings.EqualFold(payload.PermissionMode, "plan") && payload.HookEventName == "" {
+		return "父亲，Codex Plan Mode 需要你处理。"
+	}
+
+	if payload.Event != "" || payload.Status != "" || payload.Message != "" {
+		return "父亲，Codex 有新的通知。"
+	}
+
+	return "父亲，Codex 任务已完成。"
+}
+
+func containsAny(s string, needles ...string) bool {
+	for _, needle := range needles {
+		if strings.Contains(s, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func notificationTitle(payload NotifyPayload) string {
+	title := strings.TrimPrefix(notificationHeadline(payload), "父亲，")
+	return strings.TrimSuffix(title, "。")
+}
+
 func (p NotifyPayload) hasLifecycleContext() bool {
-	return p.HookEventName != "" || p.SessionID != "" || p.TurnID != "" || p.TranscriptPath != "" || p.Model != "" || p.PermissionMode != "" || p.LastAssistantMessage != "" || p.ToolName != "" || p.ToolUseID != ""
+	return p.HookEventName != "" || p.SessionID != "" || p.TurnID != "" || p.CWD != "" || p.TranscriptPath != "" || p.Model != "" || p.PermissionMode != "" || p.LastAssistantMessage != "" || len(p.InputMessages) > 0 || p.ToolName != "" || p.ToolUseID != ""
 }
 
 func enrichGoalFromTranscript(payload *NotifyPayload) error {
@@ -435,9 +576,9 @@ func sendOpeniLinkHub(cfg Config, text string) error {
 	return nil
 }
 
-func sendBark(cfg Config, text string) error {
+func sendBark(cfg Config, text string, payload NotifyPayload) error {
 	body, err := json.Marshal(BarkRequest{
-		Title: "Codex 任务已完成",
+		Title: notificationTitle(payload),
 		Body:  text,
 		Group: "Codex",
 	})
@@ -477,6 +618,7 @@ func sendHermesWebhook(cfg Config, text string, payload NotifyPayload) error {
 		Model:                payload.Model,
 		PermissionMode:       payload.PermissionMode,
 		LastAssistantMessage: payload.LastAssistantMessage,
+		InputMessages:        payload.InputMessages,
 		ToolName:             payload.ToolName,
 		ToolUseID:            payload.ToolUseID,
 		Goal:                 payload.Goal,
@@ -529,7 +671,7 @@ func sendNotifications(cfg Config, text string, payload NotifyPayload) error {
 	}
 
 	if cfg.BarkServerURL != "" {
-		if err := sendBark(cfg, text); err != nil {
+		if err := sendBark(cfg, text, payload); err != nil {
 			errs = append(errs, "bark: "+err.Error())
 		}
 	}
