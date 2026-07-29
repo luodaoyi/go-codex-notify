@@ -1,20 +1,30 @@
 {
-  "name": "go-codex-notify",
+  "name": "@asural/codex-notify",
   "version": "1.3.13",
   "description": "Multi-channel notifier for OpenAI Codex notifications",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
   "bin": {
-    "go-codex-notify": "bin/cli.js"
+    "codex-notify": "bin/cli.js"
   },
   "files": [
     "bin",
-    "scripts",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
-    "test": "go test ./... && node test/cli-stdin-forwarding.test.js",
-    "postinstall": "node scripts/install.js"
+    "test": "cargo test --all-targets && cargo build && node test/launcher.test.js"
+  },
+  "optionalDependencies": {
+    "@asural/codex-notify-win32-x64": "1.3.13",
+    "@asural/codex-notify-win32-arm64": "1.3.13",
+    "@asural/codex-notify-linux-x64": "1.3.13",
+    "@asural/codex-notify-linux-arm64": "1.3.13",
+    "@asural/codex-notify-darwin-x64": "1.3.13",
+    "@asural/codex-notify-darwin-arm64": "1.3.13"
   },
   "repository": {
     "type": "git",
@@ -31,7 +41,8 @@
     "hermes",
     "notify",
     "cli",
-    "npx"
+    "rust",
+    "tui"
   ],
   "engines": {
     "node": ">=18"

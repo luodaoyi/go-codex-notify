@@ -2,69 +2,66 @@
 
 const { spawnSync } = require('node:child_process');
 const { existsSync, readFileSync } = require('node:fs');
-const { join } = require('node:path');
+const { dirname, join } = require('node:path');
 
-const ROOT = join(__dirname, '..');
-const GO_MAIN = join(ROOT, 'main.go');
-const HAS_LOCAL_SOURCE = existsSync(GO_MAIN);
+const TARGETS = {
+  'win32:x64': ['@asural/codex-notify-win32-x64', 'codex-notify.exe'],
+  'win32:arm64': ['@asural/codex-notify-win32-arm64', 'codex-notify.exe'],
+  'linux:x64': ['@asural/codex-notify-linux-x64', 'codex-notify'],
+  'linux:arm64': ['@asural/codex-notify-linux-arm64', 'codex-notify'],
+  'darwin:x64': ['@asural/codex-notify-darwin-x64', 'codex-notify'],
+  'darwin:arm64': ['@asural/codex-notify-darwin-arm64', 'codex-notify'],
+};
 
 (() => {
   try {
-    const stdin = readHookInput();
-    const result = HAS_LOCAL_SOURCE ? runGoSource(stdin) : runBundledBinary(stdin);
+    const binary = resolveBinary();
+    const interactive = process.stdin.isTTY && process.stdout.isTTY;
+    const args = process.argv.slice(2);
+    const result = spawnSync(binary, args, interactive
+      ? { stdio: 'inherit', env: process.env, windowsHide: true }
+      : args.length > 0
+        ? { stdio: ['ignore', 'inherit', 'inherit'], env: process.env, windowsHide: true }
+        : {
+          input: readHookInput(),
+          stdio: ['pipe', 'inherit', 'inherit'],
+          env: process.env,
+          windowsHide: true,
+        });
     if (result.error) throw result.error;
     process.exit(result.status ?? 0);
   } catch (err) {
-    console.error(`[go-codex-notify] ${err.message}`);
+    console.error(`[codex-notify] ${err.message}`);
     process.exit(1);
   }
 })();
 
-function runGoSource(stdin) {
-  return spawnSync('go', ['run', '.', ...process.argv.slice(2)], {
-    cwd: ROOT,
-    input: stdin,
-    stdio: ['pipe', 'inherit', 'inherit'],
-    env: process.env,
-  });
-}
-
-function runBundledBinary(stdin) {
-  const binaryPath = join(ROOT, '.bin', getArtifactName());
-  if (!existsSync(binaryPath)) {
-    throw new Error(
-      `binary not found at ${binaryPath}. Run postinstall or execute: node scripts/install.js`
-    );
+function resolveBinary() {
+  if (process.env.CODEX_NOTIFY_BINARY) {
+    if (!existsSync(process.env.CODEX_NOTIFY_BINARY)) {
+      throw new Error(`CODEX_NOTIFY_BINARY not found: ${process.env.CODEX_NOTIFY_BINARY}`);
+    }
+    return process.env.CODEX_NOTIFY_BINARY;
   }
 
-  return spawnSync(binaryPath, process.argv.slice(2), {
-    input: stdin,
-    stdio: ['pipe', 'inherit', 'inherit'],
-    env: process.env,
-  });
+  const target = TARGETS[`${process.platform}:${process.arch}`];
+  if (!target) {
+    throw new Error(`unsupported platform: ${process.platform}:${process.arch}`);
+  }
+  const [packageName, executable] = target;
+  try {
+    const packageRoot = dirname(require.resolve(`${packageName}/package.json`));
+    const binary = join(packageRoot, 'bin', executable);
+    if (!existsSync(binary)) throw new Error(`binary not found: ${binary}`);
+    return binary;
+  } catch (error) {
+    throw new Error(
+      `native package ${packageName} is unavailable (${error.message}). ` +
+      'Reinstall from the official npm registry.'
+    );
+  }
 }
 
 function readHookInput() {
-  if (process.stdin.isTTY) {
-    return undefined;
-  }
-  return readFileSync(0);
-}
-
-function getArtifactName() {
-  const p = process.platform;
-  const a = process.arch;
-  const map = {
-    'win32:x64': 'notify-telegram-windows-amd64.exe',
-    'win32:arm64': 'notify-telegram-windows-arm64.exe',
-    'linux:x64': 'notify-telegram-linux-amd64',
-    'linux:arm64': 'notify-telegram-linux-arm64',
-    'darwin:x64': 'notify-telegram-darwin-amd64',
-    'darwin:arm64': 'notify-telegram-darwin-arm64',
-  };
-  const key = `${p}:${a}`;
-  if (!map[key]) {
-    throw new Error(`unsupported platform: ${key}`);
-  }
-  return map[key];
+  return process.stdin.isTTY ? undefined : readFileSync(0);
 }

@@ -1,6 +1,8 @@
-notify-telegram
-notify-telegram.exe
-notify-telegram-*
+target/
 dist/
-notify-telegram.json
-go-codex-notify
+.bin/
+codex-notify.json
+codex-notify
+codex-notify.exe
+codex-notify-*
+packages/*/bin/

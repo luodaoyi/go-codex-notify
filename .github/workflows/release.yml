@@ -7,9 +7,8 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag to release, e.g. v1.0.0'
+        description: 'Version tag to release, e.g. v1.3.14'
         required: true
-        default: 'v1.0.0'
 
 permissions:
   contents: write
@@ -68,62 +67,86 @@ jobs:
           git push origin "$VERSION"
 
   build:
-    name: Build ${{ matrix.goos }}-${{ matrix.goarch }}
+    name: Build ${{ matrix.package }}
     needs: prepare-release
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - goos: windows
-            goarch: amd64
-            artifact: notify-telegram-windows-amd64.exe
-          - goos: windows
-            goarch: arm64
-            artifact: notify-telegram-windows-arm64.exe
-          - goos: linux
-            goarch: amd64
-            artifact: notify-telegram-linux-amd64
-          - goos: linux
-            goarch: arm64
-            artifact: notify-telegram-linux-arm64
-          - goos: darwin
-            goarch: amd64
-            artifact: notify-telegram-darwin-amd64
-          - goos: darwin
-            goarch: arm64
-            artifact: notify-telegram-darwin-arm64
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            package: win32-x64
+            binary: codex-notify.exe
+            artifact: codex-notify-windows-x64.exe
+          - runner: windows-latest
+            target: aarch64-pc-windows-msvc
+            package: win32-arm64
+            binary: codex-notify.exe
+            artifact: codex-notify-windows-arm64.exe
+          - runner: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            package: linux-x64
+            binary: codex-notify
+            artifact: codex-notify-linux-x64
+          - runner: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            package: linux-arm64
+            binary: codex-notify
+            artifact: codex-notify-linux-arm64
+          - runner: macos-latest
+            target: x86_64-apple-darwin
+            package: darwin-x64
+            binary: codex-notify
+            artifact: codex-notify-darwin-x64
+          - runner: macos-latest
+            target: aarch64-apple-darwin
+            package: darwin-arm64
+            binary: codex-notify
+            artifact: codex-notify-darwin-arm64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           ref: ${{ needs.prepare-release.outputs.version }}
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
-          go-version: '1.23'
+          targets: ${{ matrix.target }}
+
+      - name: Install Linux ARM64 linker
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+          echo "CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
 
       - name: Build binary
         env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: 0
+          CODEX_NOTIFY_VERSION: ${{ needs.prepare-release.outputs.npm_version }}
         shell: bash
         run: |
           mkdir -p dist
-          go build -trimpath -ldflags="-s -w" -o "dist/${{ matrix.artifact }}" .
+          cargo build --release --locked --target "${{ matrix.target }}"
+          cp "target/${{ matrix.target }}/release/${{ matrix.binary }}" "dist/${{ matrix.artifact }}"
 
       - name: Generate SHA256 checksum
         shell: bash
         run: |
           cd dist
-          sha256sum "${{ matrix.artifact }}" > "${{ matrix.artifact }}.sha256"
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "${{ matrix.artifact }}" > "${{ matrix.artifact }}.sha256"
+          else
+            shasum -a 256 "${{ matrix.artifact }}" > "${{ matrix.artifact }}.sha256"
+          fi
 
       - name: Upload artifact bundle
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.goos }}-${{ matrix.goarch }}
+          name: ${{ matrix.package }}
           path: |
             dist/${{ matrix.artifact }}
             dist/${{ matrix.artifact }}.sha256
@@ -168,17 +191,89 @@ jobs:
         with:
           node-version: '24'
           package-manager-cache: false
+          registry-url: 'https://registry.npmjs.org'
+          scope: '@asural'
+
+      - name: Verify npm credentials
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        shell: bash
+        run: |
+          if [[ -z "$NODE_AUTH_TOKEN" ]]; then
+            echo "::error::GitHub Actions secret NPM_TOKEN is required"
+            exit 1
+          fi
+          npm whoami --registry https://registry.npmjs.org
+
+      - name: Download platform binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
 
       - name: Update package version if needed
         shell: bash
+        env:
+          TARGET_VERSION: ${{ needs.prepare-release.outputs.npm_version }}
         run: |
-          CURRENT_VERSION=$(node -p "require('./package.json').version")
-          TARGET_VERSION="${{ needs.prepare-release.outputs.npm_version }}"
-          if [[ "$CURRENT_VERSION" != "$TARGET_VERSION" ]]; then
-            npm version --no-git-tag-version "$TARGET_VERSION"
-          else
-            echo "package.json already at version $TARGET_VERSION"
-          fi
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const version = process.env.TARGET_VERSION;
+          const packageDirs = [
+            'win32-x64', 'win32-arm64', 'linux-x64',
+            'linux-arm64', 'darwin-x64', 'darwin-arm64'
+          ];
+          const rootPath = 'package.json';
+          const root = JSON.parse(fs.readFileSync(rootPath, 'utf8'));
+          root.version = version;
+          for (const dependency of Object.keys(root.optionalDependencies)) {
+            root.optionalDependencies[dependency] = version;
+          }
+          fs.writeFileSync(rootPath, JSON.stringify(root, null, 2) + '\n');
+          for (const directory of packageDirs) {
+            const manifestPath = path.join('packages', directory, 'package.json');
+            const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+            manifest.version = version;
+            fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
+          }
+          NODE
 
-      - name: Publish to npm
-        run: npm publish --registry https://registry.npmjs.org --access public
+      - name: Stage platform npm packages
+        shell: bash
+        run: |
+          mkdir -p packages/{win32-x64,win32-arm64,linux-x64,linux-arm64,darwin-x64,darwin-arm64}/bin
+          cp artifacts/win32-x64/codex-notify-windows-x64.exe packages/win32-x64/bin/codex-notify.exe
+          cp artifacts/win32-arm64/codex-notify-windows-arm64.exe packages/win32-arm64/bin/codex-notify.exe
+          cp artifacts/linux-x64/codex-notify-linux-x64 packages/linux-x64/bin/codex-notify
+          cp artifacts/linux-arm64/codex-notify-linux-arm64 packages/linux-arm64/bin/codex-notify
+          cp artifacts/darwin-x64/codex-notify-darwin-x64 packages/darwin-x64/bin/codex-notify
+          cp artifacts/darwin-arm64/codex-notify-darwin-arm64 packages/darwin-arm64/bin/codex-notify
+          chmod +x packages/linux-*/bin/codex-notify packages/darwin-*/bin/codex-notify
+
+      - name: Publish platform npm packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        shell: bash
+        run: |
+          for directory in win32-x64 win32-arm64 linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
+            name=$(node -p "require('./packages/$directory/package.json').name")
+            version=$(node -p "require('./packages/$directory/package.json').version")
+            if npm view "$name@$version" version --registry https://registry.npmjs.org >/dev/null 2>&1; then
+              echo "Already published: $name@$version"
+            else
+              npm publish "./packages/$directory" --registry https://registry.npmjs.org --access public --provenance
+            fi
+          done
+
+      - name: Publish main npm package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        shell: bash
+        run: |
+          name=$(node -p "require('./package.json').name")
+          version=$(node -p "require('./package.json').version")
+          if npm view "$name@$version" version --registry https://registry.npmjs.org >/dev/null 2>&1; then
+            echo "Already published: $name@$version"
+          else
+            npm publish --registry https://registry.npmjs.org --access public --provenance
+          fi
