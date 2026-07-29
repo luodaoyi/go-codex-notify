@@ -24,6 +24,8 @@ pub struct Config {
     pub hermes_webhook_secret: String,
     #[serde(default)]
     pub bark_server_url: String,
+    #[serde(default)]
+    pub ignore_subagent_notifications: bool,
 }
 
 impl Config {
@@ -36,6 +38,7 @@ impl Config {
             hermes_webhook_url: env_value("HERMES_WEBHOOK_URL"),
             hermes_webhook_secret: env_value("HERMES_WEBHOOK_SECRET"),
             bark_server_url: env_value("BARK_SERVER_URL"),
+            ignore_subagent_notifications: false,
         };
 
         if let Some(path) = config_path() {
@@ -110,6 +113,7 @@ impl Config {
         fill(&mut self.hermes_webhook_url, other.hermes_webhook_url);
         fill(&mut self.hermes_webhook_secret, other.hermes_webhook_secret);
         fill(&mut self.bark_server_url, other.bark_server_url);
+        self.ignore_subagent_notifications = other.ignore_subagent_notifications;
     }
 }
 
@@ -169,6 +173,7 @@ mod tests {
             bark_server_url: "https://example.com/bark".into(),
             hermes_webhook_url: "".into(),
             openilink_hub_url: " https://example.com/hub ".into(),
+            ignore_subagent_notifications: true,
             ..Config::default()
         };
         config.save_to_path(&custom_path).unwrap();
@@ -178,6 +183,7 @@ mod tests {
         assert_eq!(loaded.bark_server_url, "https://example.com/bark");
         assert_eq!(loaded.hermes_webhook_url, "");
         assert_eq!(loaded.openilink_hub_url, "https://example.com/hub");
+        assert!(loaded.ignore_subagent_notifications);
 
         let updated = Config {
             bot_token: "updated-token".into(),
@@ -187,5 +193,6 @@ mod tests {
         let reloaded = Config::load_from_path(&custom_path).unwrap();
         assert_eq!(reloaded.bot_token, "updated-token");
         assert_eq!(reloaded.openilink_hub_url, "https://example.com/hub");
+        assert!(reloaded.ignore_subagent_notifications);
     }
 }

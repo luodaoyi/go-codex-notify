@@ -366,6 +366,45 @@ fn contains_any(value: &str, needles: &[&str]) -> bool {
 }
 
 impl NotifyPayload {
+    pub fn is_subagent(&self) -> bool {
+        if self.hook_event_name.eq_ignore_ascii_case("SubagentStop")
+            || self.event.eq_ignore_ascii_case("SubagentStop")
+            || self.client.to_ascii_lowercase().contains("subagent")
+        {
+            return true;
+        }
+
+        if let Some(raw) = &self.raw {
+            let has_subagent_identity = [
+                "agent_id",
+                "agentId",
+                "agent-id",
+                "agent_type",
+                "agentType",
+                "agent-type",
+                "parent_thread_id",
+                "parentThreadId",
+                "parent-thread-id",
+            ]
+            .iter()
+            .any(|key| raw.get(*key).is_some_and(value_is_present));
+            let explicit_subagent_flag = ["is_subagent", "isSubagent", "is-subagent"]
+                .iter()
+                .any(|key| raw.get(*key).is_some_and(value_is_true));
+            let subagent_source = first_string(raw, &["source", "thread_source", "threadSource"])
+                .to_ascii_lowercase()
+                .contains("subagent");
+            if has_subagent_identity || explicit_subagent_flag || subagent_source {
+                return true;
+            }
+        }
+
+        self.event.eq_ignore_ascii_case("agent-turn-complete")
+            && !self.session_id.is_empty()
+            && self.client.is_empty()
+            && self.input_messages.is_empty()
+    }
+
     fn has_lifecycle_context(&self) -> bool {
         !self.hook_event_name.is_empty()
             || !self.session_id.is_empty()
@@ -378,6 +417,23 @@ impl NotifyPayload {
             || !self.input_messages.is_empty()
             || !self.tool_name.is_empty()
             || !self.tool_use_id.is_empty()
+    }
+}
+
+fn value_is_present(value: &Value) -> bool {
+    match value {
+        Value::Null => false,
+        Value::String(value) => !value.trim().is_empty(),
+        _ => true,
+    }
+}
+
+fn value_is_true(value: &Value) -> bool {
+    match value {
+        Value::Bool(value) => *value,
+        Value::String(value) => value.eq_ignore_ascii_case("true") || value == "1",
+        Value::Number(value) => value.as_i64().is_some_and(|value| value != 0),
+        _ => false,
     }
 }
 
@@ -494,5 +550,26 @@ mod tests {
         assert_eq!(payload.goal.token_budget, "200000");
         assert_eq!(payload.goal.tokens_used, "12340");
         assert_eq!(payload.goal.time_used, "90");
+    }
+
+    #[test]
+    fn distinguishes_current_codex_subagent_notifications() {
+        let (child, _) = parse_bytes(
+            br#"{"type":"agent-turn-complete","thread-id":"child-thread","turn-id":"child-turn","cwd":"D:\\repo","input-messages":[],"last-assistant-message":"CHILD_DONE"}"#,
+        );
+        let (parent, _) = parse_bytes(
+            br#"{"type":"agent-turn-complete","thread-id":"parent-thread","turn-id":"parent-turn","cwd":"D:\\repo","client":"codex_exec","input-messages":["do work"],"last-assistant-message":"PARENT_DONE"}"#,
+        );
+
+        assert!(child.is_subagent());
+        assert!(!parent.is_subagent());
+    }
+
+    #[test]
+    fn recognizes_explicit_subagent_markers() {
+        let (payload, _) = parse_bytes(
+            br#"{"type":"agent-turn-complete","thread-id":"child","agent_id":"agent-1","input-messages":["delegated task"]}"#,
+        );
+        assert!(payload.is_subagent());
     }
 }

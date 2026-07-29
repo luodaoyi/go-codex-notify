@@ -25,12 +25,13 @@ const ACTIONS: [&str; 4] = [
     "退出",
 ];
 
-const FIELDS: [&str; 4] = [
+const TEXT_FIELDS: [&str; 4] = [
     "TELEGRAM_BOT_TOKEN",
     "TELEGRAM_CHAT_ID",
     "BARK_SERVER_URL",
     "HERMES_WEBHOOK_URL",
 ];
+const FIELD_COUNT: usize = TEXT_FIELDS.len() + 1;
 
 fn mask(s: &str) -> String {
     "•".repeat(s.chars().count())
@@ -47,6 +48,7 @@ struct ConfigForm {
     config: Config,
     focus: usize,
     values: [String; 4],
+    ignore_subagent_notifications: bool,
     editing: bool,
     message: String,
 }
@@ -65,6 +67,7 @@ impl ConfigForm {
             config.hermes_webhook_url.clone(),
         ];
         Self {
+            ignore_subagent_notifications: config.ignore_subagent_notifications,
             config,
             focus: 0,
             values,
@@ -83,6 +86,7 @@ impl ConfigForm {
         config.chat_id = self.values[1].trim().to_owned();
         config.bark_server_url = self.values[2].trim().to_owned();
         config.hermes_webhook_url = self.values[3].trim().to_owned();
+        config.ignore_subagent_notifications = self.ignore_subagent_notifications;
         config
     }
 
@@ -98,6 +102,7 @@ impl ConfigForm {
                     self.config.hermes_webhook_url.clone(),
                 ];
                 self.editing = false;
+                self.ignore_subagent_notifications = self.config.ignore_subagent_notifications;
                 self.message = match crate::config::config_path() {
                     Some(path) => format!("配置已保存：{}", path.display()),
                     None => "配置已保存。".into(),
@@ -241,7 +246,10 @@ fn handle_key(
                         form.focus = form.focus.saturating_sub(1);
                     }
                     KeyCode::Down | KeyCode::Tab | KeyCode::Char('j') => {
-                        form.focus = (form.focus + 1).min(FIELDS.len() - 1);
+                        form.focus = (form.focus + 1).min(FIELD_COUNT - 1);
+                    }
+                    KeyCode::Enter | KeyCode::Char(' ') if form.focus == TEXT_FIELDS.len() => {
+                        form.ignore_subagent_notifications = !form.ignore_subagent_notifications;
                     }
                     KeyCode::Enter => form.editing = true,
                     KeyCode::Char('s') => form.save(),
@@ -362,21 +370,33 @@ fn render_config(frame: &mut Frame, form: &ConfigForm) {
         areas[1],
     );
 
-    let items = FIELDS.iter().enumerate().map(|(index, label)| {
-        let value = if form.values[index].is_empty() {
-            "<未设置>".into()
-        } else if index == 0 {
-            mask(&form.values[index])
+    let mut items: Vec<ListItem> = TEXT_FIELDS
+        .iter()
+        .enumerate()
+        .map(|(index, label)| {
+            let value = if form.values[index].is_empty() {
+                "<未设置>".into()
+            } else if index == 0 {
+                mask(&form.values[index])
+            } else {
+                form.values[index].clone()
+            };
+            let editing = if index == form.focus && form.editing {
+                "  [编辑中]"
+            } else {
+                ""
+            };
+            ListItem::new(format!("{label}: {value}{editing}"))
+        })
+        .collect();
+    items.push(ListItem::new(format!(
+        "忽略 SubAgent 通知: {}",
+        if form.ignore_subagent_notifications {
+            "是（仅通知主代理）"
         } else {
-            form.values[index].clone()
-        };
-        let editing = if index == form.focus && form.editing {
-            "  [编辑中]"
-        } else {
-            ""
-        };
-        ListItem::new(format!("{label}: {value}{editing}"))
-    });
+            "否（全部通知）"
+        }
+    )));
     let fields = List::new(items)
         .block(Block::default().title(" 配置项 ").borders(Borders::ALL))
         .highlight_symbol("▶ ")
@@ -402,7 +422,7 @@ fn render_config(frame: &mut Frame, form: &ConfigForm) {
 
     frame.render_widget(
         Paragraph::new(
-            "↑/↓/Tab 切换 · Enter 编辑/完成 · Ctrl+U/Delete 清空 · Ctrl+S 或 s 保存 · Esc 取消",
+            "↑/↓/Tab 切换 · Enter 编辑/切换 · Ctrl+U/Delete 清空 · Ctrl+S 或 s 保存 · Esc 取消",
         )
         .alignment(Alignment::Center)
         .style(Style::default().fg(Color::DarkGray)),
@@ -450,6 +470,7 @@ mod tests {
         assert_eq!(result.openilink_hub_url, "https://hub.example");
         assert_eq!(result.openilink_hub_token, "secret");
         assert_eq!(result.hermes_webhook_secret, "signing-secret");
+        assert!(!result.ignore_subagent_notifications);
     }
 
     #[test]

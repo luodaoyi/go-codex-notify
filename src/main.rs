@@ -100,6 +100,9 @@ fn build_version() -> &'static str {
 fn run_notify(args: &[String]) -> Result<()> {
     let config = Config::load()?;
     let (mut payload, raw_input) = payload::read(args)?;
+    if config.ignore_subagent_notifications && payload.is_subagent() {
+        return Ok(());
+    }
     payload::enrich_goal_from_transcript(&mut payload);
     let message = payload::build_message(&payload, &raw_input);
     notify::send_all(&config, &message, &payload)

@@ -34,13 +34,14 @@ codex-notify ui
 - `TELEGRAM_CHAT_ID`
 - `BARK_SERVER_URL`
 - `HERMES_WEBHOOK_URL`
+- “忽略 SubAgent 通知”：开启后仅发送主代理完成通知
 
 保存后会自动创建或更新 `~/.codex/codex-notify.json`。Bot Token 在界面中以圆点掩码显示；未在表单中展示的 OpeniLink 配置和 `HERMES_WEBHOOK_SECRET` 会原样保留。
 
 配置页快捷键：
 
 - `↑`、`↓` 或 `Tab`：切换字段
-- `Enter`：开始或结束编辑
+- `Enter`：开始或结束编辑；在 SubAgent 开关上切换状态
 - `Backspace`：删除一个字符
 - `Ctrl+U` 或 `Delete`：清空当前字段
 - `Ctrl+S`：保存；非编辑状态下也可按 `s`
@@ -69,7 +70,8 @@ codex-notify ui
   "openilink_hub_token": "openilink-token",
   "hermes_webhook_url": "https://hooks.example.com/codex",
   "hermes_webhook_secret": "optional-signing-secret",
-  "bark_server_url": "https://bark.example.com/device-key"
+  "bark_server_url": "https://bark.example.com/device-key",
+  "ignore_subagent_notifications": true
 }
 ```
 
@@ -105,6 +107,8 @@ export HERMES_WEBHOOK_URL='https://hooks.example.com/codex'
 ```
 
 TUI 只读取 JSON 文件中的值，不会把当前 shell 的环境变量自动写入文件。
+
+`ignore_subagent_notifications` 默认为 `false`。设为 `true` 后，SubAgent 完成不会发送到任何渠道，主代理通知不受影响。
 
 ## 命令
 
