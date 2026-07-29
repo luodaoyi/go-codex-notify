@@ -1,44 +1,154 @@
 # codex-notify
 
-Codex 多渠道通知工具。项目名 `codex-notify`，npm 主包为
-`@asural/codex-notify`；仓库仍为 <https://github.com/luodaoyi/go-codex-notify>。
+用 Rust 编写的 Codex 多渠道通知工具。npm 主包是 `@asural/codex-notify`，全局命令和原生程序都叫 `codex-notify`（Windows 为 `codex-notify.exe`）。
 
-## 安装与启动
+支持 Telegram、Bark、OpeniLink Hub 和 Hermes Webhook。配置多个渠道时会同时发送。
+
+## 安装
+
+需要 Node.js 18 或更高版本：
 
 ```bash
 npm install -g @asural/codex-notify
 codex-notify
 ```
 
-全局命令和原生程序名为 `codex-notify`（Windows 为 `codex-notify.exe`）。无参数且在交互终端启动时会进入 TUI；选择安装项后会自动完成：
+npm 只负责安装适合当前系统的原生 Rust 程序。后续运行不依赖 `npx`。
 
-- 将当前 EXE 复制到 `~/.codex/bin/codex-notify`（Windows 为 `~/.codex/bin/codex-notify.exe`）；
-- 保留 `~/.codex/config.toml` 其它内容，只更新顶层 `notify` 为该 EXE 的绝对路径。
+无参数启动时会进入 TUI。若当前环境不是交互终端，可显式运行：
 
-脚本可使用 `codex-notify install`（或 `apply`）；`status` 查看状态，`uninstall` 移除本工具写入的配置。`codex-notify notify [JSON]` 处理手动 payload，也可从 stdin 读取 JSON。
+```bash
+codex-notify ui
+```
 
-## 配置
+## 首次配置
 
-默认配置文件：`~/.codex/codex-notify.json`，也可用 `CODEX_NOTIFY_CONFIG` 指定。环境变量优先于配置文件：
+在 TUI 主菜单中选择“安装 / 更新并自动配置 Codex”。程序会：
 
-| 渠道 | 必填配置 |
-| --- | --- |
-| Telegram | `TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID` |
-| OpeniLink Hub | `OPENILINK_HUB_URL`、`OPENILINK_HUB_TOKEN`（Bearer） |
-| Bark | `BARK_SERVER_URL`（完整 POST 地址） |
-| Hermes Webhook | `HERMES_WEBHOOK_URL`；可选 `HERMES_WEBHOOK_SECRET` |
+1. 将当前原生程序复制到 `~/.codex/bin/codex-notify`，Windows 下为 `~/.codex/bin/codex-notify.exe`。
+2. 保留 `~/.codex/config.toml` 的其它内容，仅将顶层 `notify` 设置为上述程序的绝对路径。
 
-配置文件字段对应为 `bot_token`、`chat_id`、`openilink_hub_url`、`openilink_hub_token`、`bark_server_url`、`hermes_webhook_url`、`hermes_webhook_secret`。配置多个渠道会同时发送。
+然后选择“通知配置”，直接填写：
+
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHAT_ID`
+- `BARK_SERVER_URL`
+- `HERMES_WEBHOOK_URL`
+
+保存后会自动创建或更新 `~/.codex/codex-notify.json`。Bot Token 在界面中以圆点掩码显示；未在表单中展示的 OpeniLink 配置和 `HERMES_WEBHOOK_SECRET` 会原样保留。
+
+配置页快捷键：
+
+- `↑`、`↓` 或 `Tab`：切换字段
+- `Enter`：开始或结束编辑
+- `Backspace`：删除一个字符
+- `Ctrl+U` 或 `Delete`：清空当前字段
+- `Ctrl+S`：保存；非编辑状态下也可按 `s`
+- `Esc`：放弃尚未保存的修改并返回主菜单
+
+## 通知渠道
+
+| 渠道 | 配置 | 说明 |
+| --- | --- | --- |
+| Telegram | `TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID` | 两项都填写后才会启用 |
+| Bark | `BARK_SERVER_URL` | 完整的 HTTP POST 地址，例如 Bark 服务地址加设备 key |
+| Hermes Webhook | `HERMES_WEBHOOK_URL` | 可选 `HERMES_WEBHOOK_SECRET` 用于 HMAC-SHA256 签名 |
+| OpeniLink Hub | `OPENILINK_HUB_URL`、`OPENILINK_HUB_TOKEN` | Token 作为 Bearer Token 发送 |
+
+空配置不会启用对应渠道。
+
+### JSON 配置
+
+默认路径是 `~/.codex/codex-notify.json`。示例：
+
+```json
+{
+  "bot_token": "123456:ABC...",
+  "chat_id": "-1001234567890",
+  "openilink_hub_url": "https://hub.example.com/api/notify",
+  "openilink_hub_token": "openilink-token",
+  "hermes_webhook_url": "https://hooks.example.com/codex",
+  "hermes_webhook_secret": "optional-signing-secret",
+  "bark_server_url": "https://bark.example.com/device-key"
+}
+```
+
+只保留实际使用的字段即可。不要将包含 Token 的配置文件提交到 Git。
+
+可用 `CODEX_NOTIFY_CONFIG` 指定其它配置文件：
+
+```powershell
+$env:CODEX_NOTIFY_CONFIG = 'D:\configs\codex-notify.json'
+codex-notify ui
+```
+
+```bash
+CODEX_NOTIFY_CONFIG=/path/to/codex-notify.json codex-notify ui
+```
+
+### 环境变量
+
+所有渠道都可以只用环境变量配置。非空环境变量优先于 JSON 文件中的同名配置：
+
+```powershell
+$env:TELEGRAM_BOT_TOKEN = '123456:ABC...'
+$env:TELEGRAM_CHAT_ID = '-1001234567890'
+$env:BARK_SERVER_URL = 'https://bark.example.com/device-key'
+$env:HERMES_WEBHOOK_URL = 'https://hooks.example.com/codex'
+```
+
+```bash
+export TELEGRAM_BOT_TOKEN='123456:ABC...'
+export TELEGRAM_CHAT_ID='-1001234567890'
+export BARK_SERVER_URL='https://bark.example.com/device-key'
+export HERMES_WEBHOOK_URL='https://hooks.example.com/codex'
+```
+
+TUI 只读取 JSON 文件中的值，不会把当前 shell 的环境变量自动写入文件。
+
+## 命令
+
+```text
+codex-notify                  启动 TUI；非交互环境下处理 stdin
+codex-notify ui               显式启动 TUI
+codex-notify install|apply    复制 EXE 并配置 Codex notify
+codex-notify status           查看 EXE 和 Codex notify 配置状态
+codex-notify uninstall|remove 移除本工具写入的 notify 配置
+codex-notify notify [JSON]    手动处理通知 payload，也可从 stdin 读取
+codex-notify --version        显示版本
+```
+
+`uninstall` 只移除本工具写入 `config.toml` 的 `notify`，不会删除其它 Codex 配置。
+
+手动测试：
+
+```bash
+codex-notify notify '{"type":"agent-turn-complete","last-assistant-message":"测试通知"}'
+```
 
 ## Payload 与 Hermes 兼容
 
-Codex 顶层 `notify = [".../codex-notify"]` 会传入 JSON；常用字段：`type`/`event`、`thread-id`、`turn-id`、`cwd`、`input-messages`、`last-assistant-message`，并兼容下划线和驼峰别名。非 JSON 文本也可直接作为消息。
+Codex 会将 JSON payload 作为参数传给 `notify` 程序。工具识别 `type`/`event`、`thread-id`、`turn-id`、`cwd`、`input-messages`、`last-assistant-message` 等常用字段，并兼容下划线和驼峰别名；非 JSON 文本会直接作为消息发送。
 
-Hermes 请求为 JSON，固定 `event_type: "codex_notify"` 和渲染后的 `message`；有值时附带 `client`、`hook_event_name`、`session_id`、`turn_id`、`cwd`、`transcript_path`、`model`、`permission_mode`、`last_assistant_message`、`input_messages`、`tool_name`、`tool_use_id`、`goal`。设置 secret 时发送 `X-Webhook-Signature`（HMAC-SHA256 小写十六进制）。没有值的字段会省略。
+Hermes 请求固定包含 `event_type: "codex_notify"` 和渲染后的 `message`。有值时还会附带 `client`、`hook_event_name`、`session_id`、`turn_id`、`cwd`、`transcript_path`、`model`、`permission_mode`、`last_assistant_message`、`input_messages`、`tool_name`、`tool_use_id` 和 `goal`。设置 secret 后会发送小写十六进制的 `X-Webhook-Signature`。
+
+## 常见问题
+
+### 运行 `codex-notify` 没有进入 TUI
+
+无参数启动仅在 stdin 和 stdout 都是交互终端时进入 TUI。请在本机终端运行 `codex-notify ui`；CI 或管道环境使用子命令。
+
+### 保存后没有收到通知
+
+先运行 `codex-notify status`，确认 EXE 和 Codex notify 都显示“已配置”；再用上面的 `notify` 命令测试渠道地址。Telegram 必须同时配置 Bot Token 和 Chat ID，Bark 必须填写完整 POST 地址。
+
+### 想恢复原有 notify 配置
+
+运行 `codex-notify uninstall`。工具只会移除由自身写入的 notify；若当前 notify 已被其它工具修改，则不会覆盖或删除它。
 
 ## 开发
 
-需要 Rust 1.80+、Node.js 18+：
+需要 Rust 1.80+ 和 Node.js 18+：
 
 ```bash
 cargo fmt --all -- --check
@@ -48,11 +158,16 @@ npm test
 
 ## 自动发布
 
-推送符合 `vX.Y.Z`（下一版可用 `v1.3.14`）的 tag，或手动运行 `release` workflow（`workflow_dispatch` 输入版本），会构建 Windows/Linux/macOS 的 x64 与 arm64 六个平台，创建或更新 GitHub Release，然后发布六个平台 npm 包及主包 `@asural/codex-notify`。
+推送 `vMAJOR.MINOR.PATCH` tag，或手动运行 `release` workflow 并输入版本，会构建 Windows、Linux、macOS 的 x64/ARM64 六个平台，创建 GitHub Release，并发布六个平台包和主包 `@asural/codex-notify`。
 
-发布前，在 npm owner `asural` 下创建可写入 `@asural` 公共包的 granular access token；若发布策略强制 2FA，还需允许该 token 绕过发布时的 2FA。在 GitHub 仓库 `Settings > Secrets and variables > Actions` 中把它保存为 `NPM_TOKEN`。workflow 已声明 `contents:write` 与 `id-token:write`；仓库或组织策略也必须允许 Actions 写入 contents。
+发布使用 npm Trusted Publishing（GitHub OIDC），不需要长期 `NPM_TOKEN`。npm 上的七个包都必须配置同一个 Trusted Publisher：
 
-配置完成后发布是自动的；已成功发布的同版本子包会在 workflow 重跑时跳过。
+- GitHub organization/user：`luodaoyi`
+- Repository：`go-codex-notify`
+- Workflow filename：`release.yml`
+- Environment：留空
+
+workflow 已声明 `id-token: write` 和 `contents: write`，并通过 `npm publish --provenance` 发布。已存在的同版本包会自动跳过。
 
 ## 许可证
 
