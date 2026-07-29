@@ -194,17 +194,6 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
           scope: '@asural'
 
-      - name: Verify npm credentials
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        shell: bash
-        run: |
-          if [[ -z "$NODE_AUTH_TOKEN" ]]; then
-            echo "::error::GitHub Actions secret NPM_TOKEN is required"
-            exit 1
-          fi
-          npm whoami --registry https://registry.npmjs.org
-
       - name: Download platform binaries
         uses: actions/download-artifact@v4
         with:
@@ -251,8 +240,6 @@ jobs:
           chmod +x packages/linux-*/bin/codex-notify packages/darwin-*/bin/codex-notify
 
       - name: Publish platform npm packages
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         shell: bash
         run: |
           for directory in win32-x64 win32-arm64 linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
@@ -266,8 +253,6 @@ jobs:
           done
 
       - name: Publish main npm package
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         shell: bash
         run: |
           name=$(node -p "require('./package.json').name")
