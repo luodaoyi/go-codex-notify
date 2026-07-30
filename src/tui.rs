@@ -20,7 +20,7 @@ use crate::install::{self, InstallationStatus, Paths};
 
 const ACTIONS: [&str; 4] = [
     "安装 / 更新并自动配置 Codex",
-    "移除本工具的 Codex notify 配置",
+    "移除本工具的 Codex Hooks 配置",
     "通知配置",
     "退出",
 ];
@@ -103,9 +103,12 @@ impl ConfigForm {
                 ];
                 self.editing = false;
                 self.ignore_subagent_notifications = self.config.ignore_subagent_notifications;
-                self.message = match crate::config::config_path() {
-                    Some(path) => format!("配置已保存：{}", path.display()),
-                    None => "配置已保存。".into(),
+                self.message = match install::apply() {
+                    Ok(result) => format!(
+                        "配置与 Hook 已同步：{}；请在 Codex /hooks 中确认信任。",
+                        result.hooks.display()
+                    ),
+                    Err(error) => format!("通知配置已保存，但同步 Codex Hook 失败：{error:#}"),
                 };
             }
             Err(error) => self.message = format!("保存失败：{error:#}"),
@@ -179,18 +182,20 @@ fn handle_key(
                 0 => match install::apply() {
                     Ok(result) => {
                         *status = install::status(paths)?;
-                        *message =
-                            format!("配置完成。Codex notify 已指向：{}", result.binary.display());
+                        *message = format!(
+                            "配置完成：{}；请在 Codex /hooks 中确认信任。",
+                            result.hooks.display()
+                        );
                     }
                     Err(error) => *message = format!("配置失败：{error:#}"),
                 },
                 1 => match install::uninstall() {
                     Ok(true) => {
                         *status = install::status(paths)?;
-                        *message = "已移除本工具写入的 Codex notify 配置。".into();
+                        *message = "已移除本工具写入的 Codex Hooks/旧 notify 配置。".into();
                     }
                     Ok(false) => {
-                        *message = "当前 notify 不是本工具配置的，未做修改。".into();
+                        *message = "没有找到本工具写入的 Hooks/旧 notify，未做修改。".into();
                     }
                     Err(error) => *message = format!("移除失败：{error:#}"),
                 },
@@ -273,7 +278,7 @@ fn render_menu(
         .margin(2)
         .constraints([
             Constraint::Length(3),
-            Constraint::Length(6),
+            Constraint::Length(8),
             Constraint::Length(7),
             Constraint::Min(4),
             Constraint::Length(2),
@@ -294,10 +299,17 @@ fn render_menu(
     frame.render_widget(title, areas[0]);
 
     let status_text = vec![
-        Line::from(status_line("原生 EXE", status.binary_installed)),
-        Line::from(status_line("Codex notify", status.hook_configured)),
+        Line::from(status_line("原生 EXE（当前版本）", status.binary_current)),
+        Line::from(status_line("Codex Stop Hook", status.hook_configured)),
+        Line::from(if status.subagent_hook_configured {
+            "通知范围：主代理 + SubAgent"
+        } else if status.hook_configured {
+            "通知范围：仅主代理"
+        } else {
+            "通知范围：未配置"
+        }),
         Line::from(format!("目标路径：{}", paths.installed_binary.display())),
-        Line::from(format!("配置文件：{}", paths.config.display())),
+        Line::from(format!("Hooks 文件：{}", paths.hooks.display())),
     ];
     frame.render_widget(
         Paragraph::new(status_text)
@@ -390,11 +402,11 @@ fn render_config(frame: &mut Frame, form: &ConfigForm) {
         })
         .collect();
     items.push(ListItem::new(format!(
-        "忽略 SubAgent 通知: {}",
+        "通知范围: {}",
         if form.ignore_subagent_notifications {
-            "是（仅通知主代理）"
+            "仅主代理"
         } else {
-            "否（全部通知）"
+            "主代理 + SubAgent"
         }
     )));
     let fields = List::new(items)
