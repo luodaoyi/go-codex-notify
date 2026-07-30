@@ -300,7 +300,7 @@ fn update_event(
 
 fn hook_handler(binary: &Path) -> Value {
     let command = hook_command(binary);
-    let mut handler = Map::from_iter([
+    let handler = Map::from_iter([
         ("type".to_owned(), Value::String("command".to_owned())),
         ("command".to_owned(), Value::String(command)),
         ("timeout".to_owned(), Value::from(30)),
@@ -308,12 +308,12 @@ fn hook_handler(binary: &Path) -> Value {
             "statusMessage".to_owned(),
             Value::String("Sending codex-notify".to_owned()),
         ),
+        #[cfg(windows)]
+        (
+            "commandWindows".to_owned(),
+            Value::String(hook_command_windows(binary)),
+        ),
     ]);
-    #[cfg(windows)]
-    handler.insert(
-        "commandWindows".to_owned(),
-        Value::String(hook_command_windows(binary)),
-    );
     Value::Object(handler)
 }
 
