@@ -205,13 +205,13 @@ pub fn build_telegram_markdown_v2(payload: &NotifyPayload) -> String {
     if !user_input.is_empty() {
         sections.push(format!(
             "*用户输入*\n{}",
-            escape_telegram_markdown_v2(&user_input)
+            crate::telegram_markdown::render(&user_input)
         ));
     }
     if !response.is_empty() {
         sections.push(format!(
             "*Codex 回应*\n{}",
-            escape_telegram_markdown_v2(&response)
+            crate::telegram_markdown::render(&response)
         ));
     }
     sections.join("\n\n")
@@ -228,19 +228,6 @@ fn message_parts(payload: &NotifyPayload) -> (String, String) {
         response = "任务已完成".to_owned();
     }
     (user_input, response)
-}
-
-fn escape_telegram_markdown_v2(value: &str) -> String {
-    const RESERVED: &str = "\\_*[]()~`>#+-=|{}.!";
-
-    let mut escaped = String::with_capacity(value.len());
-    for character in value.chars() {
-        if RESERVED.contains(character) {
-            escaped.push('\\');
-        }
-        escaped.push(character);
-    }
-    escaped
 }
 
 fn push_field(lines: &mut Vec<String>, name: &str, value: &str) {
@@ -504,16 +491,16 @@ mod tests {
     }
 
     #[test]
-    fn escapes_dynamic_text_for_telegram_markdown_v2() {
+    fn converts_commonmark_for_telegram_markdown_v2() {
         let payload = NotifyPayload {
-            input_messages: vec!["修复 *Markdown* [链接](https://example.com)!".into()],
-            last_assistant_message: "已完成_v2. 路径 C:\\tmp".into(),
+            input_messages: vec!["修复 **Markdown** [链接](https://example.com)!".into()],
+            last_assistant_message: "### 结果\n\n- 已完成_v2.\n- 使用 `C:\\tmp`".into(),
             ..NotifyPayload::default()
         };
 
         assert_eq!(
             build_telegram_markdown_v2(&payload),
-            "*用户输入*\n修复 \\*Markdown\\* \\[链接\\]\\(https://example\\.com\\)\\!\n\n*Codex 回应*\n已完成\\_v2\\. 路径 C:\\\\tmp"
+            "*用户输入*\n修复 *Markdown* [链接](https://example.com)\\!\n\n*Codex 回应*\n*结果*\n\n• 已完成\\_v2\\.\n• 使用 `C:\\\\tmp`"
         );
     }
 

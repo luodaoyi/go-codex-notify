@@ -144,7 +144,7 @@ codex-notify notify '{"type":"agent-turn-complete","last-assistant-message":"测
 
 ## 通知内容
 
-所有渠道的可见正文只包含“用户输入”和“Codex 回应”。Bark 使用原生 `markdown` 字段发送并保留正文中的基础 Markdown；Telegram 使用 `MarkdownV2`，固定标题会加粗，动态正文会自动转义以避免特殊字符导致发送失败。
+所有渠道的可见正文只包含“用户输入”和“Codex 回应”。Bark 使用原生 `markdown` 字段发送并保留正文中的基础 Markdown；Telegram 会把 Codex 输出的 CommonMark 转换为 `MarkdownV2`，支持标题、列表、链接、粗体、斜体、删除线、引用、行内代码和代码块，并自动转义普通文本中的特殊字符。
 
 ```markdown
 **用户输入**

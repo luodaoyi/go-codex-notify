@@ -236,7 +236,7 @@ mod tests {
         assert_eq!(body["parse_mode"], "MarkdownV2");
         assert_eq!(
             body["text"],
-            "*用户输入*\n测试 \\*格式\\*\\!\n\n*Codex 回应*\n完成\\_v2\\."
+            "*用户输入*\n测试 _格式_\\!\n\n*Codex 回应*\n完成\\_v2\\."
         );
     }
 
