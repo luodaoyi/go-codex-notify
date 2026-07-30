@@ -180,25 +180,67 @@ fn clean_strings(values: Vec<String>) -> Vec<String> {
 }
 
 pub fn build_message(payload: &NotifyPayload) -> String {
+    let (user_input, response) = message_parts(payload);
     let mut lines = Vec::with_capacity(2);
-    if !payload.input_messages.is_empty() {
-        push_field(
-            &mut lines,
-            "用户输入",
-            &format_input_messages(&payload.input_messages),
-        );
-    }
-    let response = if payload.last_assistant_message.is_empty() {
-        &payload.message
-    } else {
-        &payload.last_assistant_message
-    };
-    push_field(&mut lines, "Codex 回应", response);
-    if lines.is_empty() {
-        lines.push("Codex 回应：任务已完成".to_owned());
-    }
-
+    push_field(&mut lines, "用户输入", &user_input);
+    push_field(&mut lines, "Codex 回应", &response);
     lines.join("\n")
+}
+
+pub fn build_bark_markdown(payload: &NotifyPayload) -> String {
+    let (user_input, response) = message_parts(payload);
+    let mut sections = Vec::with_capacity(2);
+    if !user_input.is_empty() {
+        sections.push(format!("**用户输入**\n\n{user_input}"));
+    }
+    if !response.is_empty() {
+        sections.push(format!("**Codex 回应**\n\n{response}"));
+    }
+    sections.join("\n\n---\n\n")
+}
+
+pub fn build_telegram_markdown_v2(payload: &NotifyPayload) -> String {
+    let (user_input, response) = message_parts(payload);
+    let mut sections = Vec::with_capacity(2);
+    if !user_input.is_empty() {
+        sections.push(format!(
+            "*用户输入*\n{}",
+            escape_telegram_markdown_v2(&user_input)
+        ));
+    }
+    if !response.is_empty() {
+        sections.push(format!(
+            "*Codex 回应*\n{}",
+            escape_telegram_markdown_v2(&response)
+        ));
+    }
+    sections.join("\n\n")
+}
+
+fn message_parts(payload: &NotifyPayload) -> (String, String) {
+    let user_input = format_input_messages(&payload.input_messages);
+    let mut response = if payload.last_assistant_message.is_empty() {
+        payload.message.clone()
+    } else {
+        payload.last_assistant_message.clone()
+    };
+    if user_input.is_empty() && response.is_empty() {
+        response = "任务已完成".to_owned();
+    }
+    (user_input, response)
+}
+
+fn escape_telegram_markdown_v2(value: &str) -> String {
+    const RESERVED: &str = "\\_*[]()~`>#+-=|{}.!";
+
+    let mut escaped = String::with_capacity(value.len());
+    for character in value.chars() {
+        if RESERVED.contains(character) {
+            escaped.push('\\');
+        }
+        escaped.push(character);
+    }
+    escaped
 }
 
 fn push_field(lines: &mut Vec<String>, name: &str, value: &str) {
@@ -448,6 +490,10 @@ mod tests {
             "用户输入：修复 Bark 通知 / 确认 TUI\nCodex 回应：已完成"
         );
         assert!(!message.contains("thread-123"));
+        assert_eq!(
+            build_bark_markdown(&complete),
+            "**用户输入**\n\n修复 Bark 通知 / 确认 TUI\n\n---\n\n**Codex 回应**\n\n已完成"
+        );
 
         let attention = NotifyPayload {
             event: "user-interaction-required".into(),
@@ -455,6 +501,20 @@ mod tests {
             ..NotifyPayload::default()
         };
         assert_eq!(notification_title(&attention), "Codex 需要你继续处理");
+    }
+
+    #[test]
+    fn escapes_dynamic_text_for_telegram_markdown_v2() {
+        let payload = NotifyPayload {
+            input_messages: vec!["修复 *Markdown* [链接](https://example.com)!".into()],
+            last_assistant_message: "已完成_v2. 路径 C:\\tmp".into(),
+            ..NotifyPayload::default()
+        };
+
+        assert_eq!(
+            build_telegram_markdown_v2(&payload),
+            "*用户输入*\n修复 \\*Markdown\\* \\[链接\\]\\(https://example\\.com\\)\\!\n\n*Codex 回应*\n已完成\\_v2\\. 路径 C:\\\\tmp"
+        );
     }
 
     #[test]

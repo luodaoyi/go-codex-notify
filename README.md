@@ -144,11 +144,18 @@ codex-notify notify '{"type":"agent-turn-complete","last-assistant-message":"测
 
 ## 通知内容
 
-所有渠道的可见正文只包含：
+所有渠道的可见正文只包含“用户输入”和“Codex 回应”。Bark 使用原生 `markdown` 字段发送并保留正文中的基础 Markdown；Telegram 使用 `MarkdownV2`，固定标题会加粗，动态正文会自动转义以避免特殊字符导致发送失败。
 
-```text
-用户输入：<本轮用户消息>
-Codex 回应：<本轮最终回应>
+```markdown
+**用户输入**
+
+<本轮用户消息>
+
+---
+
+**Codex 回应**
+
+<本轮最终回应>
 ```
 
 会话 ID、轮次 ID、工作目录、模型、权限模式和 transcript 路径不会进入通知，也不会作为 Hermes 的额外字段发送。Codex `Stop` Hook 没有直接提供用户输入时，程序会从 Hook 给出的 transcript 中读取本轮最后一条用户消息。

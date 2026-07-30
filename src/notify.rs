@@ -9,7 +9,7 @@ use sha2::Sha256;
 
 use crate::{
     config::Config,
-    payload::{notification_title, NotifyPayload},
+    payload::{build_bark_markdown, build_telegram_markdown_v2, notification_title, NotifyPayload},
 };
 
 const JSON_CONTENT_TYPE: &str = "application/json; charset=utf-8";
@@ -17,7 +17,8 @@ const JSON_CONTENT_TYPE: &str = "application/json; charset=utf-8";
 #[derive(Serialize)]
 struct TelegramRequest<'a> {
     chat_id: &'a str,
-    text: &'a str,
+    text: String,
+    parse_mode: &'static str,
 }
 
 #[derive(Serialize)]
@@ -26,9 +27,9 @@ struct OpeniLinkRequest<'a> {
 }
 
 #[derive(Serialize)]
-struct BarkRequest<'a> {
+struct BarkRequest {
     title: String,
-    body: &'a str,
+    markdown: String,
     group: &'static str,
 }
 
@@ -46,7 +47,7 @@ pub fn send_all(config: &Config, text: &str, payload: &NotifyPayload) -> Result<
         collect(
             &mut errors,
             "telegram",
-            send_telegram(&client, config, text),
+            send_telegram(&client, config, payload),
         );
     }
     if !config.openilink_hub_url.is_empty() && !config.openilink_hub_token.is_empty() {
@@ -57,11 +58,7 @@ pub fn send_all(config: &Config, text: &str, payload: &NotifyPayload) -> Result<
         );
     }
     if !config.bark_server_url.is_empty() {
-        collect(
-            &mut errors,
-            "bark",
-            send_bark(&client, config, text, payload),
-        );
+        collect(&mut errors, "bark", send_bark(&client, config, payload));
     }
     if !config.hermes_webhook_url.is_empty() {
         collect(
@@ -84,16 +81,21 @@ fn collect(errors: &mut Vec<String>, provider: &str, result: Result<()>) {
     }
 }
 
-fn send_telegram(client: &Client, config: &Config, text: &str) -> Result<()> {
+fn send_telegram(client: &Client, config: &Config, payload: &NotifyPayload) -> Result<()> {
     let url = format!(
         "https://api.telegram.org/bot{}/sendMessage",
         config.bot_token
     );
-    let body = serde_json::to_vec(&TelegramRequest {
-        chat_id: &config.chat_id,
-        text,
-    })?;
+    let body = telegram_body(config, payload)?;
     post_json(client, &url, HeaderMap::new(), body, "telegram api")
+}
+
+fn telegram_body(config: &Config, payload: &NotifyPayload) -> Result<Vec<u8>> {
+    Ok(serde_json::to_vec(&TelegramRequest {
+        chat_id: &config.chat_id,
+        text: build_telegram_markdown_v2(payload),
+        parse_mode: "MarkdownV2",
+    })?)
 }
 
 fn send_openilink(client: &Client, config: &Config, text: &str) -> Result<()> {
@@ -113,8 +115,8 @@ fn send_openilink(client: &Client, config: &Config, text: &str) -> Result<()> {
     )
 }
 
-fn send_bark(client: &Client, config: &Config, text: &str, payload: &NotifyPayload) -> Result<()> {
-    let body = bark_body(text, payload)?;
+fn send_bark(client: &Client, config: &Config, payload: &NotifyPayload) -> Result<()> {
+    let body = bark_body(payload)?;
     post_json(
         client,
         &config.bark_server_url,
@@ -124,10 +126,10 @@ fn send_bark(client: &Client, config: &Config, text: &str, payload: &NotifyPaylo
     )
 }
 
-fn bark_body(text: &str, payload: &NotifyPayload) -> Result<Vec<u8>> {
+fn bark_body(payload: &NotifyPayload) -> Result<Vec<u8>> {
     Ok(serde_json::to_vec(&BarkRequest {
         title: notification_title(payload),
-        body: text,
+        markdown: build_bark_markdown(payload),
         group: "Codex",
     })?)
 }
@@ -199,13 +201,43 @@ mod tests {
     use super::*;
 
     #[test]
-    fn bark_request_matches_existing_contract() {
-        let payload = NotifyPayload::default();
-        let body = bark_body("Codex finished", &payload).unwrap();
+    fn bark_request_uses_markdown_field() {
+        let payload = NotifyPayload {
+            input_messages: vec!["测试 **Markdown**".into()],
+            last_assistant_message: "已完成".into(),
+            ..NotifyPayload::default()
+        };
+        let body = bark_body(&payload).unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(body["title"], "Codex 任务已完成");
-        assert_eq!(body["body"], "Codex finished");
+        assert_eq!(
+            body["markdown"],
+            "**用户输入**\n\n测试 **Markdown**\n\n---\n\n**Codex 回应**\n\n已完成"
+        );
+        assert!(body.get("body").is_none());
         assert_eq!(body["group"], "Codex");
+    }
+
+    #[test]
+    fn telegram_request_uses_markdown_v2() {
+        let config = Config {
+            chat_id: "chat-1".into(),
+            ..Config::default()
+        };
+        let payload = NotifyPayload {
+            input_messages: vec!["测试 *格式*!".into()],
+            last_assistant_message: "完成_v2.".into(),
+            ..NotifyPayload::default()
+        };
+        let body: Value =
+            serde_json::from_slice(&telegram_body(&config, &payload).unwrap()).unwrap();
+
+        assert_eq!(body["chat_id"], "chat-1");
+        assert_eq!(body["parse_mode"], "MarkdownV2");
+        assert_eq!(
+            body["text"],
+            "*用户输入*\n测试 \\*格式\\*\\!\n\n*Codex 回应*\n完成\\_v2\\."
+        );
     }
 
     #[test]
