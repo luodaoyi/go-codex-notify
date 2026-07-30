@@ -1,6 +1,6 @@
 {
   "name": "@asural/codex-notify-win32-x64",
-  "version": "1.3.18",
+  "version": "1.3.19",
   "description": "Windows x64 native binary for codex-notify",
   "license": "MIT",
   "publishConfig": { "access": "public", "registry": "https://registry.npmjs.org" },

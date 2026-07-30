@@ -5,6 +5,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Context, Result};
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use serde_json::{json, Map, Value};
 use tempfile::NamedTempFile;
 use toml_edit::DocumentMut;
@@ -342,7 +343,15 @@ fn hook_command(binary: &Path) -> String {
 }
 
 fn hook_command_windows(binary: &Path) -> String {
-    format!("\"{}\" hook", display_path(binary))
+    let script = format!("& '{}' hook", display_path(binary).replace('\'', "''"));
+    let utf16le = script
+        .encode_utf16()
+        .flat_map(u16::to_le_bytes)
+        .collect::<Vec<_>>();
+    format!(
+        "powershell.exe -NoProfile -NonInteractive -EncodedCommand {}",
+        BASE64.encode(utf16le)
+    )
 }
 
 fn shell_quote(value: &str) -> String {
@@ -564,6 +573,9 @@ fn binary_name() -> &'static str {
 mod tests {
     use super::*;
 
+    #[cfg(windows)]
+    use std::process::Command;
+
     fn event_handlers<'a>(root: &'a Value, event: &str) -> Vec<&'a Value> {
         root["hooks"][event]
             .as_array()
@@ -741,5 +753,36 @@ mod tests {
 
         assert!(error.to_string().contains("Stop"));
         assert_eq!(fs::read(&paths.hooks).unwrap(), original);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_hook_command_runs_from_powershell_and_cmd() {
+        let directory = tempfile::tempdir().unwrap();
+        let hook_dir = directory.path().join("hook with spaces");
+        fs::create_dir_all(&hook_dir).unwrap();
+        let hook = hook_dir.join("notify hook.cmd");
+        let marker = hook_dir.join("called.txt");
+        fs::write(
+            &hook,
+            "@echo off\r\nif not \"%~1\"==\"hook\" exit /B 7\r\necho called>\"%~dp0called.txt\"\r\n",
+        )
+        .unwrap();
+        let command = hook_command_windows(&hook);
+
+        let powershell_status = Command::new("powershell.exe")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &command])
+            .status()
+            .unwrap();
+        assert!(powershell_status.success());
+        assert!(marker.is_file());
+        fs::remove_file(&marker).unwrap();
+
+        let cmd_status = Command::new("cmd.exe")
+            .args(["/D", "/S", "/C", &command])
+            .status()
+            .unwrap();
+        assert!(cmd_status.success());
+        assert!(marker.is_file());
     }
 }
