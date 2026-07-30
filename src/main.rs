@@ -119,11 +119,11 @@ fn build_version() -> &'static str {
 
 fn run_notify(args: &[String], filter_legacy_subagent: bool) -> Result<()> {
     let config = Config::load()?;
-    let (mut payload, raw_input) = payload::read(args)?;
+    let (mut payload, _) = payload::read(args)?;
     if filter_legacy_subagent && config.ignore_subagent_notifications && payload.is_subagent() {
         return Ok(());
     }
-    payload::enrich_goal_from_transcript(&mut payload);
-    let message = payload::build_message(&payload, &raw_input);
+    payload::enrich_user_input_from_transcript(&mut payload);
+    let message = payload::build_message(&payload);
     notify::send_all(&config, &message, &payload)
 }

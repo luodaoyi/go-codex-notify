@@ -4,44 +4,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use serde::Serialize;
 use serde_json::{Map, Value};
-
-#[derive(Clone, Debug, Default, Serialize)]
-pub struct GoalContext {
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub objective: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub status: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub token_budget: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub tokens_used: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub time_used: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub created_at: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub updated_at: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub thread_id: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub turn_id: String,
-}
-
-impl GoalContext {
-    pub fn is_empty(&self) -> bool {
-        self.objective.is_empty()
-            && self.status.is_empty()
-            && self.token_budget.is_empty()
-            && self.tokens_used.is_empty()
-            && self.time_used.is_empty()
-            && self.created_at.is_empty()
-            && self.updated_at.is_empty()
-            && self.thread_id.is_empty()
-            && self.turn_id.is_empty()
-    }
-}
 
 #[derive(Clone, Debug, Default)]
 pub struct NotifyPayload {
@@ -61,7 +24,6 @@ pub struct NotifyPayload {
     pub input_messages: Vec<String>,
     pub tool_name: String,
     pub tool_use_id: String,
-    pub goal: GoalContext,
     pub raw: Option<Map<String, Value>>,
 }
 
@@ -163,7 +125,6 @@ pub fn parse_bytes(bytes: &[u8]) -> (NotifyPayload, String) {
         tool_name: first_string(&raw, &["tool_name", "toolName", "tool-name"]),
         tool_use_id: first_string(&raw, &["tool_use_id", "toolUseId", "tool-use-id"]),
         raw: Some(raw),
-        ..NotifyPayload::default()
     };
 
     (payload, raw_input)
@@ -218,38 +179,8 @@ fn clean_strings(values: Vec<String>) -> Vec<String> {
         .collect()
 }
 
-pub fn build_message(payload: &NotifyPayload, raw_input: &str) -> String {
-    let mut lines = vec![notification_headline(payload), String::new()];
-
-    push_field(&mut lines, "客户端", &payload.client);
-    if payload.event != payload.hook_event_name {
-        push_field(&mut lines, "事件", &payload.event);
-    }
-    push_field(&mut lines, "会话", &payload.session_id);
-    push_field(&mut lines, "轮次", &payload.turn_id);
-    push_field(&mut lines, "项目目录", &payload.cwd);
-    push_field(&mut lines, "模型", &payload.model);
-    push_field(&mut lines, "权限模式", &payload.permission_mode);
-    push_field(&mut lines, "转写记录", &payload.transcript_path);
-    push_field(&mut lines, "目标", &payload.goal.objective);
-    push_field(&mut lines, "目标状态", &payload.goal.status);
-    push_field(&mut lines, "目标耗时", &payload.goal.time_used);
-    if !payload.goal.token_budget.is_empty() || !payload.goal.tokens_used.is_empty() {
-        let value = if payload.goal.token_budget.is_empty() {
-            payload.goal.tokens_used.clone()
-        } else {
-            format!(
-                "{} / {}",
-                payload.goal.tokens_used, payload.goal.token_budget
-            )
-        };
-        push_field(&mut lines, "目标 Token", &value);
-    }
-    push_field(&mut lines, "目标轮次", &payload.goal.turn_id);
-    push_field(&mut lines, "目标线程", &payload.goal.thread_id);
-    push_field(&mut lines, "工具", &payload.tool_name);
-    push_field(&mut lines, "工具调用", &payload.tool_use_id);
-    push_field(&mut lines, "任务", &payload.task);
+pub fn build_message(payload: &NotifyPayload) -> String {
+    let mut lines = Vec::with_capacity(2);
     if !payload.input_messages.is_empty() {
         push_field(
             &mut lines,
@@ -257,16 +188,17 @@ pub fn build_message(payload: &NotifyPayload, raw_input: &str) -> String {
             &format_input_messages(&payload.input_messages),
         );
     }
-    push_field(&mut lines, "状态", &payload.status);
-    push_field(&mut lines, "消息", &payload.message);
-    push_field(&mut lines, "Codex 回应", &payload.last_assistant_message);
-
-    if !raw_input.is_empty() && payload.message.is_empty() && !payload.has_lifecycle_context() {
-        lines.push(String::new());
-        lines.push(format!("原始输入：{raw_input}"));
+    let response = if payload.last_assistant_message.is_empty() {
+        &payload.message
+    } else {
+        &payload.last_assistant_message
+    };
+    push_field(&mut lines, "Codex 回应", response);
+    if lines.is_empty() {
+        lines.push("Codex 回应：任务已完成".to_owned());
     }
 
-    lines.join("\n").trim().to_owned()
+    lines.join("\n")
 }
 
 fn push_field(lines: &mut Vec<String>, name: &str, value: &str) {
@@ -404,20 +336,6 @@ impl NotifyPayload {
             && self.client.is_empty()
             && self.input_messages.is_empty()
     }
-
-    fn has_lifecycle_context(&self) -> bool {
-        !self.hook_event_name.is_empty()
-            || !self.session_id.is_empty()
-            || !self.turn_id.is_empty()
-            || !self.cwd.is_empty()
-            || !self.transcript_path.is_empty()
-            || !self.model.is_empty()
-            || !self.permission_mode.is_empty()
-            || !self.last_assistant_message.is_empty()
-            || !self.input_messages.is_empty()
-            || !self.tool_name.is_empty()
-            || !self.tool_use_id.is_empty()
-    }
 }
 
 fn value_is_present(value: &Value) -> bool {
@@ -437,7 +355,10 @@ fn value_is_true(value: &Value) -> bool {
     }
 }
 
-pub fn enrich_goal_from_transcript(payload: &mut NotifyPayload) {
+pub fn enrich_user_input_from_transcript(payload: &mut NotifyPayload) {
+    if !payload.input_messages.is_empty() {
+        return;
+    }
     let path = payload.transcript_path.trim();
     if path.is_empty() {
         return;
@@ -452,37 +373,38 @@ pub fn enrich_goal_from_transcript(payload: &mut NotifyPayload) {
         .map(str::trim)
         .filter(|line| !line.is_empty())
     {
-        let Ok(Value::Object(raw)) = serde_json::from_str::<Value>(line) else {
+        let Ok(value) = serde_json::from_str::<Value>(line) else {
             continue;
         };
-        let method = first_string(&raw, &["method", "event", "type"]);
-        if method != "thread/goal/updated" && method != "threadGoalUpdated" {
-            continue;
-        }
-
-        let params = raw.get("params").and_then(Value::as_object).unwrap_or(&raw);
-        let goal = params
-            .get("goal")
-            .and_then(Value::as_object)
-            .unwrap_or(params);
-        payload.goal = GoalContext {
-            objective: first_string(goal, &["objective"]),
-            status: first_string(goal, &["status"]),
-            token_budget: first_string(goal, &["tokenBudget", "token_budget"]),
-            tokens_used: first_string(goal, &["tokensUsed", "tokens_used"]),
-            time_used: first_string(goal, &["timeUsedSeconds", "time_used_seconds"]),
-            created_at: first_string(goal, &["createdAt", "created_at"]),
-            updated_at: first_string(goal, &["updatedAt", "updated_at"]),
-            thread_id: first_string(goal, &["threadId", "thread_id"]),
-            turn_id: first_string(params, &["turnId", "turn_id"]),
-        };
-        if payload.goal.thread_id.is_empty() {
-            payload.goal.thread_id = first_string(params, &["threadId", "thread_id"]);
-        }
-        if !payload.goal.objective.is_empty() {
-            return;
+        if let Some(message) = transcript_user_message(&value) {
+            payload.input_messages.push(message);
+            break;
         }
     }
+}
+
+fn transcript_user_message(value: &Value) -> Option<String> {
+    let raw = value.as_object()?;
+    let entry = raw.get("payload").and_then(Value::as_object).unwrap_or(raw);
+    let entry_type = first_string(entry, &["type"]);
+    if entry_type == "user_message" {
+        let message = first_string(entry, &["message", "text"]);
+        return (!message.is_empty()).then_some(message);
+    }
+    if entry_type != "message" || !first_string(entry, &["role"]).eq_ignore_ascii_case("user") {
+        return None;
+    }
+
+    let content = entry.get("content")?.as_array()?;
+    let message = content
+        .iter()
+        .filter_map(Value::as_object)
+        .filter(|part| first_string(part, &["type"]) == "input_text")
+        .map(|part| first_string(part, &["text"]))
+        .filter(|text| !text.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n");
+    (!message.is_empty()).then_some(message)
 }
 
 #[cfg(test)]
@@ -520,10 +442,12 @@ mod tests {
             last_assistant_message: "已完成".into(),
             ..NotifyPayload::default()
         };
-        let message = build_message(&complete, "");
-        assert!(message.starts_with("父亲，Codex 任务已完成。"));
-        assert!(message.contains("会话：thread-123"));
-        assert!(message.contains("用户输入：修复 Bark 通知 / 确认 TUI"));
+        let message = build_message(&complete);
+        assert_eq!(
+            message,
+            "用户输入：修复 Bark 通知 / 确认 TUI\nCodex 回应：已完成"
+        );
+        assert!(!message.contains("thread-123"));
 
         let attention = NotifyPayload {
             event: "user-interaction-required".into(),
@@ -534,22 +458,27 @@ mod tests {
     }
 
     #[test]
-    fn reads_latest_goal_from_transcript_without_truncating_numbers() {
+    fn reads_latest_user_input_from_codex_transcript() {
         let mut file = NamedTempFile::new().unwrap();
-        writeln!(file, r#"{{"method":"thread/goal/updated","params":{{"threadId":"old","goal":{{"objective":"old"}}}}}}"#).unwrap();
-        writeln!(file, r#"{{"method":"thread/goal/updated","params":{{"threadId":"thread-1","turnId":"turn-2","goal":{{"objective":"迁移 Rust","status":"active","tokenBudget":200000,"tokensUsed":12340,"timeUsedSeconds":90}}}}}}"#).unwrap();
+        writeln!(
+            file,
+            r#"{{"type":"event_msg","payload":{{"type":"user_message","message":"旧问题"}}}}"#
+        )
+        .unwrap();
+        writeln!(file, r#"{{"type":"response_item","payload":{{"type":"message","role":"user","content":[{{"type":"input_text","text":"修复通知正文"}}]}}}}"#).unwrap();
 
         let mut payload = NotifyPayload {
             transcript_path: file.path().to_string_lossy().into_owned(),
+            last_assistant_message: "已只保留可读内容".into(),
             ..NotifyPayload::default()
         };
-        enrich_goal_from_transcript(&mut payload);
-        assert_eq!(payload.goal.objective, "迁移 Rust");
-        assert_eq!(payload.goal.thread_id, "thread-1");
-        assert_eq!(payload.goal.turn_id, "turn-2");
-        assert_eq!(payload.goal.token_budget, "200000");
-        assert_eq!(payload.goal.tokens_used, "12340");
-        assert_eq!(payload.goal.time_used, "90");
+        enrich_user_input_from_transcript(&mut payload);
+
+        assert_eq!(payload.input_messages, ["修复通知正文"]);
+        assert_eq!(
+            build_message(&payload),
+            "用户输入：修复通知正文\nCodex 回应：已只保留可读内容"
+        );
     }
 
     #[test]

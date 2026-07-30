@@ -9,7 +9,7 @@ use sha2::Sha256;
 
 use crate::{
     config::Config,
-    payload::{notification_title, GoalContext, NotifyPayload},
+    payload::{notification_title, NotifyPayload},
 };
 
 const JSON_CONTENT_TYPE: &str = "application/json; charset=utf-8";
@@ -36,36 +36,6 @@ struct BarkRequest<'a> {
 struct HermesRequest<'a> {
     event_type: &'static str,
     message: &'a str,
-    #[serde(skip_serializing_if = "str::is_empty")]
-    client: &'a str,
-    #[serde(skip_serializing_if = "str::is_empty")]
-    hook_event_name: &'a str,
-    #[serde(skip_serializing_if = "str::is_empty")]
-    session_id: &'a str,
-    #[serde(skip_serializing_if = "str::is_empty")]
-    turn_id: &'a str,
-    #[serde(skip_serializing_if = "str::is_empty")]
-    cwd: &'a str,
-    #[serde(skip_serializing_if = "str::is_empty")]
-    transcript_path: &'a str,
-    #[serde(skip_serializing_if = "str::is_empty")]
-    model: &'a str,
-    #[serde(skip_serializing_if = "str::is_empty")]
-    permission_mode: &'a str,
-    #[serde(skip_serializing_if = "str::is_empty")]
-    last_assistant_message: &'a str,
-    #[serde(skip_serializing_if = "string_slice_is_empty")]
-    input_messages: &'a [String],
-    #[serde(skip_serializing_if = "str::is_empty")]
-    tool_name: &'a str,
-    #[serde(skip_serializing_if = "str::is_empty")]
-    tool_use_id: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    goal: Option<&'a GoalContext>,
-}
-
-fn string_slice_is_empty(value: &&[String]) -> bool {
-    value.is_empty()
 }
 
 pub fn send_all(config: &Config, text: &str, payload: &NotifyPayload) -> Result<()> {
@@ -97,7 +67,7 @@ pub fn send_all(config: &Config, text: &str, payload: &NotifyPayload) -> Result<
         collect(
             &mut errors,
             "hermes webhook",
-            send_hermes(&client, config, text, payload),
+            send_hermes(&client, config, text),
         );
     }
 
@@ -162,13 +132,8 @@ fn bark_body(text: &str, payload: &NotifyPayload) -> Result<Vec<u8>> {
     })?)
 }
 
-fn send_hermes(
-    client: &Client,
-    config: &Config,
-    text: &str,
-    payload: &NotifyPayload,
-) -> Result<()> {
-    let body = hermes_body(text, payload)?;
+fn send_hermes(client: &Client, config: &Config, text: &str) -> Result<()> {
+    let body = hermes_body(text)?;
     let mut headers = HeaderMap::new();
     if !config.hermes_webhook_secret.is_empty() {
         headers.insert(
@@ -185,23 +150,10 @@ fn send_hermes(
     )
 }
 
-fn hermes_body(text: &str, payload: &NotifyPayload) -> Result<Vec<u8>> {
+fn hermes_body(text: &str) -> Result<Vec<u8>> {
     Ok(serde_json::to_vec(&HermesRequest {
         event_type: "codex_notify",
         message: text,
-        client: &payload.client,
-        hook_event_name: &payload.hook_event_name,
-        session_id: &payload.session_id,
-        turn_id: &payload.turn_id,
-        cwd: &payload.cwd,
-        transcript_path: &payload.transcript_path,
-        model: &payload.model,
-        permission_mode: &payload.permission_mode,
-        last_assistant_message: &payload.last_assistant_message,
-        input_messages: &payload.input_messages,
-        tool_name: &payload.tool_name,
-        tool_use_id: &payload.tool_use_id,
-        goal: (!payload.goal.is_empty()).then_some(&payload.goal),
     })?)
 }
 
@@ -257,22 +209,12 @@ mod tests {
     }
 
     #[test]
-    fn hermes_request_is_signed_and_structured() {
-        let payload = NotifyPayload {
-            hook_event_name: "Stop".into(),
-            session_id: "session-123".into(),
-            goal: GoalContext {
-                objective: "ship it".into(),
-                status: "active".into(),
-                ..GoalContext::default()
-            },
-            ..NotifyPayload::default()
-        };
-        let body = hermes_body("done", &payload).unwrap();
+    fn hermes_request_contains_only_readable_message() {
+        let body = hermes_body("用户输入：测试\nCodex 回应：完成").unwrap();
         let decoded: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(decoded["event_type"], "codex_notify");
-        assert_eq!(decoded["hook_event_name"], "Stop");
-        assert_eq!(decoded["goal"]["objective"], "ship it");
+        assert_eq!(decoded.as_object().unwrap().len(), 2);
+        assert_eq!(decoded["message"], "用户输入：测试\nCodex 回应：完成");
         assert_eq!(
             sign_hermes(&body, "test-secret").len(),
             64,

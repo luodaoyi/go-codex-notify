@@ -21,15 +21,23 @@ npm 只负责安装适合当前系统的原生 Rust 程序。后续运行不依�
 codex-notify ui
 ```
 
-## 首次配置
+## TUI 配置与使用
 
-在 TUI 主菜单中先进入“通知配置”，填写渠道并选择通知范围，保存即可自动完成安装。也可以随时选择“安装 / 更新并自动配置 Codex”重新同步。程序会：
+首次运行 `codex-notify` 后：
+
+1. 进入“通知配置”。
+2. 填写至少一个通知渠道；不使用的渠道保持为空。
+3. 将“通知范围”设为“仅主代理”（推荐）或“主代理 + SubAgent”。
+4. 按 `Ctrl+S` 保存；非编辑状态下也可以按 `s`。
+5. 新开 Codex 会话，运行 `/hooks`，检查并信任 `codex-notify` Hook。
+
+保存配置时会同时完成三件事：
 
 1. 将当前原生程序复制到 `~/.codex/bin/codex-notify`，Windows 下为 `~/.codex/bin/codex-notify.exe`。
 2. 创建或合并 `~/.codex/hooks.json`：仅主代理模式注册 `Stop`，全部代理模式同时注册 `Stop` 和 `SubagentStop`。
 3. 如果 `~/.codex/config.toml` 中仍有本工具旧版本写入的 `notify`，自动移除；其它 Codex 配置和第三方 Hooks 不会被删除。
 
-通知配置可以直接填写：
+TUI 可以直接填写并写入 JSON：
 
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
@@ -39,7 +47,7 @@ codex-notify ui
 
 保存后会自动创建或更新 `~/.codex/codex-notify.json`，并同步 EXE 和 Hooks。Bot Token 在界面中以圆点掩码显示；未在表单中展示的 OpeniLink 配置和 `HERMES_WEBHOOK_SECRET` 会原样保留。
 
-Codex 会要求审核新的命令 Hook。安装或 Hook 变化后，请新开一个 Codex 会话，运行 `/hooks`，检查命令指向 `~/.codex/bin/codex-notify` 后选择信任。未经信任的 Hook 会被 Codex 跳过。
+Codex 会审核新的命令 Hook。安装或 Hook 命令变化后，必须新开一个 Codex 会话并运行 `/hooks`，确认命令指向 `~/.codex/bin/codex-notify` 后选择信任。未经信任的 Hook 不会运行。
 
 配置页快捷键：
 
@@ -109,7 +117,7 @@ export BARK_SERVER_URL='https://bark.example.com/device-key'
 export HERMES_WEBHOOK_URL='https://hooks.example.com/codex'
 ```
 
-TUI 只读取 JSON 文件中的值，不会把当前 shell 的环境变量自动写入文件。
+TUI 编辑和保存的是 JSON 文件；环境变量只在当前进程运行时覆盖配置，不会被 TUI 自动写入文件。
 
 `ignore_subagent_notifications` 默认为 `false`。设为 `true` 时安装器只注册官方 `Stop` Hook；设为 `false` 时同时注册 `Stop` 和 `SubagentStop`。切换后在 TUI 保存，或再次运行 `codex-notify install` 使 Hooks 生效。
 
@@ -134,11 +142,22 @@ codex-notify --version        显示版本
 codex-notify notify '{"type":"agent-turn-complete","last-assistant-message":"测试通知"}'
 ```
 
-## Hook Payload 与 Hermes 兼容
+## 通知内容
 
-Codex Hooks 会将一个 JSON 对象写入程序 stdin。工具识别 `hook_event_name`、`session_id`、`turn_id`、`cwd`、`last_assistant_message` 等字段，并继续兼容旧 `notify` 的 `type`、`thread-id`、`input-messages` 及下划线、驼峰别名；非 JSON 文本会直接作为消息发送。
+所有渠道的可见正文只包含：
 
-Hermes 请求固定包含 `event_type: "codex_notify"` 和渲染后的 `message`。有值时还会附带 `client`、`hook_event_name`、`session_id`、`turn_id`、`cwd`、`transcript_path`、`model`、`permission_mode`、`last_assistant_message`、`input_messages`、`tool_name`、`tool_use_id` 和 `goal`。设置 secret 后会发送小写十六进制的 `X-Webhook-Signature`。
+```text
+用户输入：<本轮用户消息>
+Codex 回应：<本轮最终回应>
+```
+
+会话 ID、轮次 ID、工作目录、模型、权限模式和 transcript 路径不会进入通知，也不会作为 Hermes 的额外字段发送。Codex `Stop` Hook 没有直接提供用户输入时，程序会从 Hook 给出的 transcript 中读取本轮最后一条用户消息。
+
+## Hook 与 Hermes 兼容
+
+Codex Hooks 会将 JSON 写入程序 stdin。本工具识别官方 Hook 字段，并继续兼容旧 `notify` 的字段别名；非 JSON 文本会作为 `Codex 回应` 发送。
+
+Hermes 请求只包含 `event_type: "codex_notify"` 和上述 `message`。设置 `HERMES_WEBHOOK_SECRET` 后会发送小写十六进制的 `X-Webhook-Signature`（HMAC-SHA256）。
 
 ## 常见问题
 
