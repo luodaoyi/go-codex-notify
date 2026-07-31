@@ -1,9 +1,20 @@
 const { spawn, spawnSync } = require('node:child_process');
 const assert = require('node:assert/strict');
+const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 
 const root = join(__dirname, '..');
 const cli = join(root, 'bin', 'cli.js');
+const scopedManifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+const topLevelManifest = JSON.parse(
+  readFileSync(join(root, 'packages', 'go-codex-notify', 'package.json'), 'utf8')
+);
+assert.equal(scopedManifest.name, '@asural/codex-notify');
+assert.equal(topLevelManifest.name, 'go-codex-notify');
+assert.equal(topLevelManifest.version, scopedManifest.version);
+assert.deepEqual(topLevelManifest.optionalDependencies, scopedManifest.optionalDependencies);
+assert.equal(topLevelManifest.bin['codex-notify'], 'bin/cli.js');
+assert.equal(topLevelManifest.bin['go-codex-notify'], 'bin/cli.js');
 const targetRoot = process.env.CARGO_TARGET_DIR
   ? resolve(root, process.env.CARGO_TARGET_DIR)
   : join(root, 'target');

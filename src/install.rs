@@ -8,7 +8,7 @@ use anyhow::{anyhow, Context, Result};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use serde_json::{json, Map, Value};
 use tempfile::NamedTempFile;
-use toml_edit::DocumentMut;
+use toml_edit::{Array, DocumentMut};
 
 use crate::config::Config;
 
@@ -112,8 +112,7 @@ pub fn status(paths: &Paths) -> Result<InstallationStatus> {
             SUBAGENT_STOP_EVENT,
             &paths.installed_binary,
         )?,
-        legacy_notify_configured: configured_notify_hook(&paths.config)?
-            .is_some_and(|path| same_display_path(&path, &paths.installed_binary)),
+        legacy_notify_configured: configured_notify_hook(&paths.config, &paths.installed_binary)?,
     })
 }
 
@@ -461,9 +460,7 @@ fn remove_notify_hook(config_path: &Path, binary: &Path) -> Result<bool> {
         let is_ours = document
             .get("notify")
             .and_then(|item| item.as_array())
-            .and_then(|array| array.iter().next())
-            .and_then(|value| value.as_str())
-            .is_some_and(|path| same_display_path(path, binary));
+            .is_some_and(|array| is_our_notify(array, binary));
         if is_ours {
             document.remove("notify");
         }
@@ -471,10 +468,10 @@ fn remove_notify_hook(config_path: &Path, binary: &Path) -> Result<bool> {
     })
 }
 
-fn configured_notify_hook(config_path: &Path) -> Result<Option<String>> {
+fn configured_notify_hook(config_path: &Path, binary: &Path) -> Result<bool> {
     let source = match fs::read_to_string(config_path) {
         Ok(source) => source,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
         Err(error) => {
             return Err(error)
                 .with_context(|| format!("读取 Codex 配置失败：{}", config_path.display()));
@@ -487,9 +484,42 @@ fn configured_notify_hook(config_path: &Path) -> Result<Option<String>> {
     Ok(document
         .get("notify")
         .and_then(|item| item.as_array())
-        .and_then(|array| array.iter().next())
-        .and_then(|value| value.as_str())
-        .map(str::to_owned))
+        .is_some_and(|array| is_our_notify(array, binary)))
+}
+
+fn is_our_notify(arguments: &Array, binary: &Path) -> bool {
+    let Some(command) = arguments.iter().next().and_then(|value| value.as_str()) else {
+        return false;
+    };
+    if same_display_path(command, binary)
+        || same_display_path(command, &binary.with_file_name(legacy_binary_name()))
+    {
+        return true;
+    }
+    is_npx_command(command)
+        && arguments
+            .iter()
+            .skip(1)
+            .filter_map(|value| value.as_str())
+            .any(is_our_package_spec)
+}
+
+fn is_npx_command(command: &str) -> bool {
+    Path::new(command)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| {
+            name.eq_ignore_ascii_case("npx")
+                || name.eq_ignore_ascii_case("npx.cmd")
+                || name.eq_ignore_ascii_case("npx.exe")
+        })
+}
+
+fn is_our_package_spec(specification: &str) -> bool {
+    specification == "go-codex-notify"
+        || specification.starts_with("go-codex-notify@")
+        || specification == "@asural/codex-notify"
+        || specification.starts_with("@asural/codex-notify@")
 }
 
 fn edit_config(config_path: &Path, edit: impl FnOnce(&mut DocumentMut) -> bool) -> Result<bool> {
@@ -566,6 +596,14 @@ fn binary_name() -> &'static str {
         "codex-notify.exe"
     } else {
         "codex-notify"
+    }
+}
+
+fn legacy_binary_name() -> &'static str {
+    if cfg!(windows) {
+        "go-codex-notify.exe"
+    } else {
+        "go-codex-notify"
     }
 }
 
@@ -733,12 +771,46 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let paths = Paths::from_codex_home(directory.path().join("codex"));
         fs::create_dir_all(&paths.codex_home).unwrap();
-        fs::write(&paths.config, "notify = [\"other-tool\"]\n").unwrap();
+        fs::write(
+            &paths.config,
+            "notify = [\"npx\", \"-y\", \"other-tool@latest\"]\n",
+        )
+        .unwrap();
 
         assert!(!remove_notify_hook(&paths.config, &paths.installed_binary).unwrap());
         assert!(fs::read_to_string(&paths.config)
             .unwrap()
-            .contains("other-tool"));
+            .contains("other-tool@latest"));
+    }
+
+    #[test]
+    fn migrates_legacy_go_package_notify_commands() {
+        let directory = tempfile::tempdir().unwrap();
+        let paths = Paths::from_codex_home(directory.path().join("codex"));
+        fs::create_dir_all(&paths.codex_home).unwrap();
+
+        fs::write(
+            &paths.config,
+            "notify = [\"npx\", \"-y\", \"go-codex-notify@latest\"]\n",
+        )
+        .unwrap();
+        assert!(configured_notify_hook(&paths.config, &paths.installed_binary).unwrap());
+        assert!(remove_notify_hook(&paths.config, &paths.installed_binary).unwrap());
+        assert!(!fs::read_to_string(&paths.config)
+            .unwrap()
+            .contains("notify"));
+
+        let legacy_binary = paths.installed_binary.with_file_name(legacy_binary_name());
+        fs::write(
+            &paths.config,
+            format!("notify = ['{}']\n", display_path(&legacy_binary)),
+        )
+        .unwrap();
+        assert!(configured_notify_hook(&paths.config, &paths.installed_binary).unwrap());
+        assert!(remove_notify_hook(&paths.config, &paths.installed_binary).unwrap());
+        assert!(!fs::read_to_string(&paths.config)
+            .unwrap()
+            .contains("notify"));
     }
 
     #[test]

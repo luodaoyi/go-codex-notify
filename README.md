@@ -1,6 +1,6 @@
 # codex-notify
 
-用 Rust 编写的 Codex 多渠道通知工具。npm 主包是 `@asural/codex-notify`，全局命令和原生程序都叫 `codex-notify`（Windows 为 `codex-notify.exe`）。
+用 Rust 编写的 Codex 多渠道通知工具。npm 主包是 `go-codex-notify`；`@asural/codex-notify` 作为兼容入口继续同步发布。全局命令和原生程序都叫 `codex-notify`（Windows 为 `codex-notify.exe`）。
 
 支持 Telegram、Bark、OpeniLink Hub 和 Hermes Webhook。配置多个渠道时会同时发送。
 
@@ -9,11 +9,26 @@
 需要 Node.js 18 或更高版本：
 
 ```bash
-npm install -g @asural/codex-notify
+pnpm add -g go-codex-notify@latest
 codex-notify
 ```
 
-npm 只负责安装适合当前系统的原生 Rust 程序。后续运行不依赖 `npx`。
+也可以使用 `npm install -g go-codex-notify@latest`。包管理器只负责安装适合当前系统的原生 Rust 程序，后续运行不依赖 `npx`。旧命令 `go-codex-notify` 仍然保留，但推荐统一使用 `codex-notify`。
+
+### 从 scoped 包切换
+
+已经全局安装 `@asural/codex-notify` 的用户可以保留原包继续使用，也可以无损切换：
+
+```bash
+pnpm remove -g @asural/codex-notify
+pnpm add -g go-codex-notify@latest
+codex-notify install
+codex-notify status
+```
+
+配置文件 `~/.codex/codex-notify.json` 和 `~/.codex/hooks.json` 不会被包管理器删除。切换时不要运行 `codex-notify uninstall`；重新运行 `install` 会更新 `~/.codex/bin/codex-notify` 并校正 Hook。
+
+从旧版 `go-codex-notify@1.3.13` 或更早版本升级时，同样在升级后运行一次 `codex-notify install`。安装器会移除本项目旧版写入的 `npx ... go-codex-notify@latest` 或 `~/.codex/bin/go-codex-notify` 顶层 `notify`，避免与新的 Stop Hook 重复通知。
 
 无参数启动时会进入 TUI。若当前环境不是交互终端，可显式运行：
 
@@ -196,9 +211,9 @@ npm test
 
 ## 自动发布
 
-推送 `vMAJOR.MINOR.PATCH` tag，或手动运行 `release` workflow 并输入版本，会构建 Windows、Linux、macOS 的 x64/ARM64 六个平台，创建 GitHub Release，并发布六个平台包和主包 `@asural/codex-notify`。
+推送 `vMAJOR.MINOR.PATCH` tag，或手动运行 `release` workflow 并输入版本，会构建 Windows、Linux、macOS 的 x64/ARM64 六个平台，创建 GitHub Release，并发布六个平台包、兼容包 `@asural/codex-notify` 和主包 `go-codex-notify`。
 
-发布使用 npm Trusted Publishing（GitHub OIDC），不需要长期 `NPM_TOKEN`。npm 上的七个包都必须配置同一个 Trusted Publisher：
+发布使用 npm Trusted Publishing（GitHub OIDC），不需要长期 `NPM_TOKEN`。npm 上的八个包都必须配置同一个 Trusted Publisher：
 
 - GitHub organization/user：`luodaoyi`
 - Repository：`go-codex-notify`
