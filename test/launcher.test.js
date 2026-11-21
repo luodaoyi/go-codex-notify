@@ -1,109 +1,59 @@
-const { spawn, spawnSync } = require('node:child_process');
+const { spawnSync } = require('node:child_process');
 const assert = require('node:assert/strict');
-const { readFileSync } = require('node:fs');
+const { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 
 const root = join(__dirname, '..');
-const cli = join(root, 'bin', 'cli.js');
-const scopedManifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
-const topLevelManifest = JSON.parse(
-  readFileSync(join(root, 'packages', 'go-codex-notify', 'package.json'), 'utf8')
-);
-assert.equal(scopedManifest.name, '@asural/codex-notify');
-assert.equal(topLevelManifest.name, 'go-codex-notify');
-assert.equal(topLevelManifest.version, scopedManifest.version);
-assert.deepEqual(topLevelManifest.optionalDependencies, scopedManifest.optionalDependencies);
-assert.equal(topLevelManifest.bin['codex-notify'], 'bin/cli.js');
-assert.equal(topLevelManifest.bin['go-codex-notify'], 'bin/cli.js');
-const targetRoot = process.env.CARGO_TARGET_DIR
-  ? resolve(root, process.env.CARGO_TARGET_DIR)
-  : join(root, 'target');
-const binary = join(
-  targetRoot,
-  'debug',
-  process.platform === 'win32' ? 'codex-notify.exe' : 'codex-notify'
-);
-const cleanEnv = {
-  ...process.env,
-  CODEX_NOTIFY_BINARY: binary,
-  TELEGRAM_BOT_TOKEN: '',
-  TELEGRAM_CHAT_ID: '',
-  OPENILINK_HUB_URL: '',
-  OPENILINK_HUB_TOKEN: '',
-  HERMES_WEBHOOK_URL: '',
-  HERMES_WEBHOOK_SECRET: '',
-  BARK_SERVER_URL: '',
-  CODEX_NOTIFY_CONFIG: join(root, 'testdata', 'missing-notify-config.json'),
-};
+const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+const plugin = JSON.parse(readFileSync(join(root, '.codex-plugin', 'plugin.json'), 'utf8'));
+assert.equal(plugin.version, manifest.version);
+assert.equal(manifest.bin, undefined);
+assert.equal(manifest.optionalDependencies, undefined);
 
-const payload = JSON.stringify({
-  hook_event_name: 'Stop',
-  session_id: 'stdin-forwarding-test',
-  last_assistant_message: 'OK',
-});
-const stdinResult = spawnSync(process.execPath, [cli], {
-  cwd: root,
-  input: payload,
-  encoding: 'utf8',
-  env: cleanEnv,
-});
-assert.equal(
-  stdinResult.status,
-  0,
-  `stdin forwarding failed\nstdout:\n${stdinResult.stdout}\nstderr:\n${stdinResult.stderr}`
-);
-assert.equal(stdinResult.stdout, '');
-assert.equal(stdinResult.stderr, '');
+const targetRoot = resolve(root, process.env.CARGO_TARGET_DIR || 'target');
+const executable = process.platform === 'win32' ? 'codex-notify.exe' : 'codex-notify';
+const binary = join(targetRoot, 'debug', executable);
+const fixture = mkdtempSync(join(targetRoot, 'plugin-launcher-'));
+try {
+  const bin = join(fixture, 'bin');
+  const launcher = join(bin, 'hook.js');
+  const native = join(bin, 'native', process.platform + '-' + process.arch);
+  mkdirSync(native, { recursive: true });
+  copyFileSync(join(root, 'bin', 'hook.js'), launcher);
+  copyFileSync(binary, join(native, executable));
+  const env = {
+    ...process.env,
+    TELEGRAM_BOT_TOKEN: '',
+    TELEGRAM_CHAT_ID: '',
+    OPENILINK_HUB_URL: '',
+    OPENILINK_HUB_TOKEN: '',
+    HERMES_WEBHOOK_URL: '',
+    HERMES_WEBHOOK_SECRET: '',
+    BARK_SERVER_URL: '',
+    CODEX_NOTIFY_CONFIG: join(fixture, 'missing-notify-config.json'),
+  };
 
-const argvResult = spawnSync(process.execPath, [cli, payload], {
-  cwd: root,
-  encoding: 'utf8',
-  env: cleanEnv,
-});
-assert.equal(
-  argvResult.status,
-  0,
-  `argv forwarding failed\nstdout:\n${argvResult.stdout}\nstderr:\n${argvResult.stderr}`
-);
-assert.equal(argvResult.stdout, '');
-assert.equal(argvResult.stderr, '');
-
-const versionResult = spawnSync(process.execPath, [cli, '--version'], {
-  cwd: root,
-  encoding: 'utf8',
-  env: cleanEnv,
-});
-assert.equal(versionResult.status, 0, versionResult.stderr);
-assert.match(versionResult.stdout, /^codex-notify \d+\.\d+\.\d+/);
-
-const openStdinResult = new Promise((resolveResult, reject) => {
-  const child = spawn(process.execPath, [cli, payload], {
-    cwd: root,
-    stdio: ['pipe', 'pipe', 'pipe'],
-    env: cleanEnv,
+  const payload = JSON.stringify({
+    hook_event_name: 'Stop',
+    turn_id: 'stdin-forwarding-test',
+    last_assistant_message: 'OK',
   });
-  let stdout = '';
-  let stderr = '';
-  child.stdout.setEncoding('utf8').on('data', (chunk) => { stdout += chunk; });
-  child.stderr.setEncoding('utf8').on('data', (chunk) => { stderr += chunk; });
-  const timeout = setTimeout(() => {
-    child.kill();
-    reject(new Error('argv invocation blocked while stdin remained open'));
-  }, 3000);
-  child.on('error', reject);
-  child.on('exit', (status) => {
-    clearTimeout(timeout);
-    resolveResult({ status, stdout, stderr });
-  });
-});
+  const result = spawnSync(process.execPath, [launcher], { cwd: fixture, input: payload, encoding: 'utf8', env });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, '');
+  assert.equal(result.stderr, '');
 
-openStdinResult
-  .then((result) => {
-    assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, '');
-    assert.equal(result.stderr, '');
-  })
-  .catch((error) => {
-    console.error(error);
-    process.exitCode = 1;
-  });
+  const invalid = spawnSync(process.execPath, [launcher], { cwd: fixture, input: 'not JSON', encoding: 'utf8', env });
+  assert.equal(invalid.status, 1, invalid.stderr);
+  assert.match(invalid.stderr, /Codex Hook JSON/);
+
+  const legacy = spawnSync(binary, ['notify', payload], { cwd: fixture, encoding: 'utf8', env });
+  assert.equal(legacy.status, 1, legacy.stderr);
+  assert.match(legacy.stderr, /Codex Notify/);
+
+  const version = spawnSync(binary, ['--version'], { cwd: fixture, encoding: 'utf8', env });
+  assert.equal(version.status, 0, version.stderr);
+  assert.equal(version.stdout.trim(), 'codex-notify ' + plugin.version);
+} finally {
+  rmSync(fixture, { recursive: true });
+}

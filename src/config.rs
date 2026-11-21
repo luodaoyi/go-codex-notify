@@ -1,14 +1,12 @@
 use std::{
     env, fs,
-    io::Write,
     path::{Path, PathBuf},
 };
 
 use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
-use tempfile::NamedTempFile;
+use serde::Deserialize;
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 pub struct Config {
     #[serde(default)]
     pub bot_token: String,
@@ -42,31 +40,9 @@ impl Config {
         };
 
         if let Some(path) = config_path() {
-            match fs::read(&path) {
-                Ok(bytes) => {
-                    let file_config: Self = serde_json::from_slice(&bytes)
-                        .with_context(|| format!("解析通知配置失败：{}", path.display()))?;
-                    config.fill_empty_from(file_config);
-                }
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                Err(error) => {
-                    return Err(error)
-                        .with_context(|| format!("读取通知配置失败：{}", path.display()));
-                }
-            }
+            config.fill_empty_from(Self::load_from_path(&path)?);
         }
-
         Ok(config)
-    }
-
-    pub fn load_from_file() -> Result<Self> {
-        let path = config_path().context("无法确定配置路径")?;
-        Self::load_from_path(&path)
-    }
-
-    pub fn save(&self) -> Result<()> {
-        let path = config_path().context("无法确定配置路径")?;
-        self.save_to_path(&path)
     }
 
     fn load_from_path(path: &Path) -> Result<Self> {
@@ -78,31 +54,6 @@ impl Config {
                 Err(error).with_context(|| format!("读取通知配置失败：{}", path.display()))
             }
         }
-    }
-
-    fn save_to_path(&self, path: &Path) -> Result<()> {
-        let parent = path.parent().context("无效配置路径")?;
-        fs::create_dir_all(parent).context("创建配置目录失败")?;
-        let mut normalized = self.clone();
-        normalized.trim_values();
-        let mut json = serde_json::to_vec_pretty(&normalized).context("序列化配置失败")?;
-        json.push(b'\n');
-
-        let mut temp_file = NamedTempFile::new_in(parent).context("创建临时文件失败")?;
-        temp_file.write_all(&json).context("写入临时文件失败")?;
-        temp_file.flush().context("刷新临时文件失败")?;
-        temp_file.persist(path).context("原子保存配置失败")?;
-        Ok(())
-    }
-
-    fn trim_values(&mut self) {
-        self.bot_token = self.bot_token.trim().to_owned();
-        self.chat_id = self.chat_id.trim().to_owned();
-        self.openilink_hub_url = self.openilink_hub_url.trim().to_owned();
-        self.openilink_hub_token = self.openilink_hub_token.trim().to_owned();
-        self.hermes_webhook_url = self.hermes_webhook_url.trim().to_owned();
-        self.hermes_webhook_secret = self.hermes_webhook_secret.trim().to_owned();
-        self.bark_server_url = self.bark_server_url.trim().to_owned();
     }
 
     fn fill_empty_from(&mut self, other: Self) {
@@ -164,35 +115,16 @@ mod tests {
     }
 
     #[test]
-    fn save_load_preservation() {
-        let temp_dir = tempfile::tempdir().unwrap();
+    fn loads_existing_channel_settings() -> Result<()> {
+        let temp_dir = tempfile::tempdir()?;
         let custom_path = temp_dir.path().join("test.json");
-        let config = Config {
-            bot_token: "  newtoken  ".into(),
-            chat_id: "123".into(),
-            bark_server_url: "https://example.com/bark".into(),
-            hermes_webhook_url: "".into(),
-            openilink_hub_url: " https://example.com/hub ".into(),
-            ignore_subagent_notifications: true,
-            ..Config::default()
-        };
-        config.save_to_path(&custom_path).unwrap();
-        let loaded = Config::load_from_path(&custom_path).unwrap();
-        assert_eq!(loaded.bot_token, "newtoken");
-        assert_eq!(loaded.chat_id, "123");
-        assert_eq!(loaded.bark_server_url, "https://example.com/bark");
-        assert_eq!(loaded.hermes_webhook_url, "");
-        assert_eq!(loaded.openilink_hub_url, "https://example.com/hub");
-        assert!(loaded.ignore_subagent_notifications);
-
-        let updated = Config {
-            bot_token: "updated-token".into(),
-            ..loaded
-        };
-        updated.save_to_path(&custom_path).unwrap();
-        let reloaded = Config::load_from_path(&custom_path).unwrap();
-        assert_eq!(reloaded.bot_token, "updated-token");
-        assert_eq!(reloaded.openilink_hub_url, "https://example.com/hub");
-        assert!(reloaded.ignore_subagent_notifications);
+        fs::write(
+            &custom_path,
+            r#"{"bark_server_url":"https://example.com/bark","ignore_subagent_notifications":true}"#,
+        )?;
+        let config = Config::load_from_path(&custom_path)?;
+        assert_eq!(config.bark_server_url, "https://example.com/bark");
+        assert!(config.ignore_subagent_notifications);
+        Ok(())
     }
 }

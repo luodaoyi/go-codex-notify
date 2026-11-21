@@ -1,7 +1,4 @@
-use std::{
-    fs,
-    io::{self, IsTerminal, Read},
-};
+use std::{fs, io};
 
 use anyhow::{Context, Result};
 use pulldown_cmark::{Event, Parser, Tag};
@@ -25,57 +22,21 @@ pub struct NotifyPayload {
     pub input_messages: Vec<String>,
     pub tool_name: String,
     pub tool_use_id: String,
-    pub raw: Option<Map<String, Value>>,
 }
 
-pub fn read(args: &[String]) -> Result<(NotifyPayload, String)> {
-    if let Some(value) = from_args(args) {
-        return Ok(parse_bytes(value.as_bytes()));
-    }
-
-    if !io::stdin().is_terminal() {
-        let mut bytes = Vec::new();
-        io::stdin()
-            .read_to_end(&mut bytes)
-            .context("读取 stdin 通知 payload 失败")?;
-        if bytes.iter().any(|byte| !byte.is_ascii_whitespace()) {
-            return Ok(parse_bytes(&bytes));
-        }
-    }
-
-    Ok((NotifyPayload::default(), String::new()))
+pub fn read() -> Result<NotifyPayload> {
+    let raw = serde_json::from_reader(io::stdin().lock()).context("读取 Codex Hook JSON 失败")?;
+    Ok(parse(&raw))
 }
 
-pub fn from_args(args: &[String]) -> Option<String> {
-    let first = args.first()?.trim();
-    if first.is_empty() || first.starts_with('-') {
-        return None;
-    }
-    if first.starts_with('{') || first.starts_with('[') || args.len() == 1 {
-        return Some(args.join(" ").trim().to_owned());
-    }
-    None
-}
-
-pub fn parse_bytes(bytes: &[u8]) -> (NotifyPayload, String) {
-    let raw_input = String::from_utf8_lossy(bytes).trim().to_owned();
-    let Ok(Value::Object(raw)) = serde_json::from_slice::<Value>(bytes) else {
-        return (
-            NotifyPayload {
-                message: raw_input.clone(),
-                ..NotifyPayload::default()
-            },
-            raw_input,
-        );
-    };
-
-    let payload = NotifyPayload {
-        client: first_string(&raw, &["client"]),
-        task: first_string(&raw, &["task", "title", "session", "thread", "objective"]),
-        status: first_string(&raw, &["status", "state", "result"]),
-        message: first_string(&raw, &["message", "summary", "text", "body", "reason"]),
+fn parse(raw: &Map<String, Value>) -> NotifyPayload {
+    NotifyPayload {
+        client: first_string(raw, &["client"]),
+        task: first_string(raw, &["task", "title", "session", "thread", "objective"]),
+        status: first_string(raw, &["status", "state", "result"]),
+        message: first_string(raw, &["message", "summary", "text", "body", "reason"]),
         event: first_string(
-            &raw,
+            raw,
             &[
                 "event",
                 "type",
@@ -86,11 +47,11 @@ pub fn parse_bytes(bytes: &[u8]) -> (NotifyPayload, String) {
             ],
         ),
         hook_event_name: first_string(
-            &raw,
+            raw,
             &["hook_event_name", "hookEventName", "hook-event-name"],
         ),
         session_id: first_string(
-            &raw,
+            raw,
             &[
                 "session_id",
                 "sessionId",
@@ -100,19 +61,19 @@ pub fn parse_bytes(bytes: &[u8]) -> (NotifyPayload, String) {
                 "threadId",
             ],
         ),
-        turn_id: first_string(&raw, &["turn_id", "turnId", "turn-id"]),
-        cwd: first_string(&raw, &["cwd"]),
+        turn_id: first_string(raw, &["turn_id", "turnId", "turn-id"]),
+        cwd: first_string(raw, &["cwd"]),
         transcript_path: first_string(
-            &raw,
+            raw,
             &["transcript_path", "transcriptPath", "transcript-path"],
         ),
-        model: first_string(&raw, &["model"]),
+        model: first_string(raw, &["model"]),
         permission_mode: first_string(
-            &raw,
+            raw,
             &["permission_mode", "permissionMode", "permission-mode"],
         ),
         last_assistant_message: first_string(
-            &raw,
+            raw,
             &[
                 "last_assistant_message",
                 "lastAssistantMessage",
@@ -120,15 +81,12 @@ pub fn parse_bytes(bytes: &[u8]) -> (NotifyPayload, String) {
             ],
         ),
         input_messages: first_string_slice(
-            &raw,
+            raw,
             &["input_messages", "inputMessages", "input-messages"],
         ),
-        tool_name: first_string(&raw, &["tool_name", "toolName", "tool-name"]),
-        tool_use_id: first_string(&raw, &["tool_use_id", "toolUseId", "tool-use-id"]),
-        raw: Some(raw),
-    };
-
-    (payload, raw_input)
+        tool_name: first_string(raw, &["tool_name", "toolName", "tool-name"]),
+        tool_use_id: first_string(raw, &["tool_use_id", "toolUseId", "tool-use-id"]),
+    }
 }
 
 fn first_string(map: &Map<String, Value>, keys: &[&str]) -> String {
@@ -396,62 +354,6 @@ impl NotifyPayload {
             .iter()
             .any(|event| self.event.eq_ignore_ascii_case(event))
     }
-
-    pub fn is_subagent(&self) -> bool {
-        if self.hook_event_name.eq_ignore_ascii_case("SubagentStop")
-            || self.event.eq_ignore_ascii_case("SubagentStop")
-            || self.client.to_ascii_lowercase().contains("subagent")
-        {
-            return true;
-        }
-
-        if let Some(raw) = &self.raw {
-            let has_subagent_identity = [
-                "agent_id",
-                "agentId",
-                "agent-id",
-                "agent_type",
-                "agentType",
-                "agent-type",
-                "parent_thread_id",
-                "parentThreadId",
-                "parent-thread-id",
-            ]
-            .iter()
-            .any(|key| raw.get(*key).is_some_and(value_is_present));
-            let explicit_subagent_flag = ["is_subagent", "isSubagent", "is-subagent"]
-                .iter()
-                .any(|key| raw.get(*key).is_some_and(value_is_true));
-            let subagent_source = first_string(raw, &["source", "thread_source", "threadSource"])
-                .to_ascii_lowercase()
-                .contains("subagent");
-            if has_subagent_identity || explicit_subagent_flag || subagent_source {
-                return true;
-            }
-        }
-
-        self.event.eq_ignore_ascii_case("agent-turn-complete")
-            && !self.session_id.is_empty()
-            && self.client.is_empty()
-            && self.input_messages.is_empty()
-    }
-}
-
-fn value_is_present(value: &Value) -> bool {
-    match value {
-        Value::Null => false,
-        Value::String(value) => !value.trim().is_empty(),
-        _ => true,
-    }
-}
-
-fn value_is_true(value: &Value) -> bool {
-    match value {
-        Value::Bool(value) => *value,
-        Value::String(value) => value.eq_ignore_ascii_case("true") || value == "1",
-        Value::Number(value) => value.as_i64().is_some_and(|value| value != 0),
-        _ => false,
-    }
 }
 
 pub fn enrich_user_input_from_transcript(payload: &mut NotifyPayload) {
@@ -529,21 +431,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_codex_notify_aliases() {
-        let input = r#"{"type":"agent-turn-complete","thread-id":"thread-123","turn-id":"turn-456","cwd":"D:\\repo","input-messages":["修复 Bark 通知",2,true],"last-assistant-message":"已完成"}"#;
-        let (payload, raw) = parse_bytes(input.as_bytes());
-        assert!(!raw.is_empty());
-        assert_eq!(payload.event, "agent-turn-complete");
+    fn parses_stop_hook_payload() -> Result<()> {
+        let input = r#"{"hook_event_name":"Stop","session_id":"thread-123","turn_id":"turn-456","cwd":"D:\\repo","last_assistant_message":"已完成"}"#;
+        let payload = parse(&serde_json::from_str(input)?);
+        assert_eq!(payload.hook_event_name, "Stop");
         assert_eq!(payload.session_id, "thread-123");
         assert_eq!(payload.turn_id, "turn-456");
-        assert_eq!(payload.input_messages, ["修复 Bark 通知", "2", "true"]);
-    }
-
-    #[test]
-    fn invalid_json_becomes_plain_message() {
-        let (payload, raw) = parse_bytes(b" plain text ");
-        assert_eq!(payload.message, "plain text");
-        assert_eq!(raw, "plain text");
+        assert_eq!(payload.last_assistant_message, "已完成");
+        Ok(())
     }
 
     #[test]
@@ -634,26 +529,5 @@ mod tests {
         payload.last_assistant_message.clear();
         assert!(build_message(&payload).is_empty());
         Ok(())
-    }
-
-    #[test]
-    fn distinguishes_current_codex_subagent_notifications() {
-        let (child, _) = parse_bytes(
-            br#"{"type":"agent-turn-complete","thread-id":"child-thread","turn-id":"child-turn","cwd":"D:\\repo","input-messages":[],"last-assistant-message":"CHILD_DONE"}"#,
-        );
-        let (parent, _) = parse_bytes(
-            br#"{"type":"agent-turn-complete","thread-id":"parent-thread","turn-id":"parent-turn","cwd":"D:\\repo","client":"codex_exec","input-messages":["do work"],"last-assistant-message":"PARENT_DONE"}"#,
-        );
-
-        assert!(child.is_subagent());
-        assert!(!parent.is_subagent());
-    }
-
-    #[test]
-    fn recognizes_explicit_subagent_markers() {
-        let (payload, _) = parse_bytes(
-            br#"{"type":"agent-turn-complete","thread-id":"child","agent_id":"agent-1","input-messages":["delegated task"]}"#,
-        );
-        assert!(payload.is_subagent());
     }
 }

@@ -1,77 +1,35 @@
-# codex-notify
+# Codex Notify
 
-用 Rust 编写的 Codex 多渠道通知工具。npm 主包是 `go-codex-notify`；`@asural/codex-notify` 作为兼容入口继续同步发布。全局命令和原生程序都叫 `codex-notify`（Windows 为 `codex-notify.exe`）。
-
-支持 Telegram、Bark、OpeniLink Hub 和 Hermes Webhook。配置多个渠道时会同时发送。
+Codex Notify 是 Codex 插件，支持 Telegram、Bark、OpeniLink Hub 和 Hermes Webhook。配置多个渠道时会同时发送。
 
 ## 安装
 
-需要 Node.js 18 或更高版本：
+需要 Node.js 18 或以上版本，并确保 Codex 能在 PATH 中找到 Node.js。可在支持 npm 插件源的 Codex CLI 中运行以下命令，也可在 Codex 桌面端的插件设置中添加同一个市场。
 
-```bash
-pnpm add -g go-codex-notify@latest
-codex-notify
-```
+~~~sh
+codex plugin marketplace add luodaoyi/go-codex-notify
+codex plugin add codex-notify@codex-notify
+~~~
 
-也可以使用 `npm install -g go-codex-notify@latest`。包管理器只负责安装适合当前系统的原生 Rust 程序，后续运行不依赖 `npx`。旧命令 `go-codex-notify` 仍然保留，但推荐统一使用 `codex-notify`。
+配置渠道后，启动新的 Codex 会话，在 `/hooks` 中检查并信任插件的 `Stop` 和 `SubagentStop`。通知正文会发送到配置的外部渠道。
 
-### 从 scoped 包切换
+### 从旧版迁移
 
-已经全局安装 `@asural/codex-notify` 的用户可以保留原包继续使用，也可以无损切换：
+如果旧版曾将命令注册到 `~/.codex/hooks.json` 或 `~/.codex/config.toml`，请在启用插件前运行一次旧版卸载命令，以免两个 Hook 重复发送。
 
-```bash
-pnpm remove -g @asural/codex-notify
-pnpm add -g go-codex-notify@latest
-codex-notify install
-codex-notify status
-```
+~~~sh
+npm exec --yes --package=go-codex-notify@1.3.24 -- codex-notify uninstall
+~~~
 
-配置文件 `~/.codex/codex-notify.json` 和 `~/.codex/hooks.json` 不会被包管理器删除。切换时不要运行 `codex-notify uninstall`；重新运行 `install` 会更新 `~/.codex/bin/codex-notify` 并校正 Hook。
+该命令移除旧版写入的 Hook 和 `notify` 项。原有渠道配置 `~/.codex/codex-notify.json` 会继续用于插件。
 
-从旧版 `go-codex-notify@1.3.13` 或更早版本升级时，同样在升级后运行一次 `codex-notify install`。安装器会移除本项目旧版写入的 `npx ... go-codex-notify@latest` 或 `~/.codex/bin/go-codex-notify` 顶层 `notify`，避免与新的 Stop Hook 重复通知。
+### 更新
 
-无参数启动时会进入 TUI。若当前环境不是交互终端，可显式运行：
+在 Codex 的插件市场中刷新并更新，或运行以下命令。更新后启动新的会话，检查 `/hooks` 的信任状态。
 
-```bash
-codex-notify ui
-```
-
-## TUI 配置与使用
-
-首次运行 `codex-notify` 后：
-
-1. 进入“通知配置”。
-2. 填写至少一个通知渠道；不使用的渠道保持为空。
-3. 将“通知范围”设为“仅主代理”（推荐）或“主代理 + SubAgent”。
-4. 按 `Ctrl+S` 保存；非编辑状态下也可以按 `s`。
-5. 新开 Codex 会话，运行 `/hooks`，检查并信任 `codex-notify` Hook。
-
-保存配置时会同时完成三件事：
-
-1. 将当前原生程序复制到 `~/.codex/bin/codex-notify`，Windows 下为 `~/.codex/bin/codex-notify.exe`。
-2. 创建或合并 `~/.codex/hooks.json`：仅主代理模式注册 `Stop`，全部代理模式同时注册 `Stop` 和 `SubagentStop`。
-3. 如果 `~/.codex/config.toml` 中仍有本工具旧版本写入的 `notify`，自动移除；其它 Codex 配置和第三方 Hooks 不会被删除。
-
-TUI 可以直接填写并写入 JSON：
-
-- `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_CHAT_ID`
-- `BARK_SERVER_URL`
-- `HERMES_WEBHOOK_URL`
-- “通知范围”：选择“仅主代理”或“主代理 + SubAgent”
-
-保存后会自动创建或更新 `~/.codex/codex-notify.json`，并同步 EXE 和 Hooks。Bot Token 在界面中以圆点掩码显示；未在表单中展示的 OpeniLink 配置和 `HERMES_WEBHOOK_SECRET` 会原样保留。
-
-Codex 会审核新的命令 Hook。安装或 Hook 命令变化后，必须新开一个 Codex 会话并运行 `/hooks`，确认命令指向 `~/.codex/bin/codex-notify` 后选择信任。未经信任的 Hook 不会运行。
-
-配置页快捷键：
-
-- `↑`、`↓` 或 `Tab`：切换字段
-- `Enter`：开始或结束编辑；在 SubAgent 开关上切换状态
-- `Backspace`：删除一个字符
-- `Ctrl+U` 或 `Delete`：清空当前字段
-- `Ctrl+S`：保存；非编辑状态下也可按 `s`
-- `Esc`：放弃尚未保存的修改并返回主菜单
+~~~sh
+codex plugin marketplace upgrade codex-notify
+~~~
 
 ## 通知渠道
 
@@ -103,16 +61,7 @@ Codex 会审核新的命令 Hook。安装或 Hook 命令变化后，必须新开
 
 只保留实际使用的字段即可。不要将包含 Token 的配置文件提交到 Git。
 
-可用 `CODEX_NOTIFY_CONFIG` 指定其它配置文件：
-
-```powershell
-$env:CODEX_NOTIFY_CONFIG = 'D:\configs\codex-notify.json'
-codex-notify ui
-```
-
-```bash
-CODEX_NOTIFY_CONFIG=/path/to/codex-notify.json codex-notify ui
-```
+可用 `CODEX_NOTIFY_CONFIG` 指定其它配置文件。通过环境变量配置时，请把变量设置在启动 Codex 的环境里。
 
 ### 环境变量
 
@@ -132,44 +81,7 @@ export BARK_SERVER_URL='https://bark.example.com/device-key'
 export HERMES_WEBHOOK_URL='https://hooks.example.com/codex'
 ```
 
-TUI 编辑和保存的是 JSON 文件；环境变量只在当前进程运行时覆盖配置，不会被 TUI 自动写入文件。
-
-`ignore_subagent_notifications` 默认为 `false`。设为 `true` 时安装器只注册官方 `Stop` Hook；设为 `false` 时同时注册 `Stop` 和 `SubagentStop`。切换后在 TUI 保存，或再次运行 `codex-notify install` 使 Hooks 生效。
-
-## 命令
-
-```text
-codex-notify                  启动 TUI；非交互环境下处理 stdin
-codex-notify ui               显式启动 TUI
-codex-notify install|apply    复制 EXE、配置 Hooks 并迁移旧 notify
-codex-notify status           查看 EXE、Stop 和 SubagentStop Hook 状态
-codex-notify uninstall|remove 移除本工具写入的 Hooks 和旧 notify
-codex-notify hook             处理 Codex Hook stdin
-codex-notify notify [JSON]    手动处理通知 payload，也可从 stdin 读取
-codex-notify --version        显示版本
-```
-
-`uninstall` 只移除命令指向本工具 EXE 的 `Stop`/`SubagentStop` Hook，以及本工具旧版本写入的 `notify`；不会删除其它 Codex 配置或第三方 Hooks。
-
-手动测试：
-
-```bash
-codex-notify notify '{"type":"agent-turn-complete","last-assistant-message":"测试通知"}'
-```
-
-## Codex 插件安装与更新
-
-插件和命令行版使用相同的渠道配置，插件内置各平台的通知程序。需要 Node.js 18 或以上版本，并确保 Codex 可以在 PATH 中找到 Node.js。请使用支持 npm 插件源的 Codex CLI，或在桌面客户端的插件设置中添加同一个市场。
-
-~~~sh
-codex plugin marketplace add luodaoyi/go-codex-notify
-codex plugin add codex-notify@codex-notify
-~~~
-
-- 已用旧版安装器注册 Hook 的用户，安装插件前先运行 `codex-notify uninstall` 移除旧 Hook，避免收到两份通知。原有渠道配置保留。
-- 首次使用时，按本页的渠道配置说明编辑 `~/.codex/codex-notify.json` 或设置环境变量。插件用户通过配置文件调整通知范围，`ignore_subagent_notifications` 设为 `true` 时只推送主代理。
-- 安装或升级后启动新的 Codex 会话，用 `/hooks` 检查并信任插件 Hook。通过 Codex 的插件市场更新功能安装后续版本，也可运行 `codex plugin marketplace upgrade codex-notify`。
-- 通知会把可见正文发送到你配置的外部渠道。插件使用本机 Hook，需要从本仓库的市场手动安装。
+`ignore_subagent_notifications` 默认为 `false`。设为 `true` 时只发主代理通知。
 
 ## 通知内容
 
@@ -189,29 +101,15 @@ codex plugin add codex-notify@codex-notify
 
 会话 ID、轮次 ID、工作目录、模型、权限模式和 transcript 路径不会进入通知，也不会作为 Hermes 的额外字段发送。Codex `Stop` Hook 没有直接提供用户输入时，程序会用 Hook 的轮次 ID 在 transcript 里查找本轮用户消息。交互工具回复、内部 Goal 指令和独立的界面注解会被过滤。
 
-## Hook 与 Hermes 兼容
-
-Codex Hooks 会将 JSON 写入程序 stdin。本工具识别官方 Hook 字段，并继续兼容旧 `notify` 的字段别名；非 JSON 文本会作为 `Codex 回应` 发送。
+## Hermes Webhook
 
 Hermes 请求只包含 `event_type: "codex_notify"` 和上述 `message`。设置 `HERMES_WEBHOOK_SECRET` 后会发送小写十六进制的 `X-Webhook-Signature`（HMAC-SHA256）。
 
-## 常见问题
+## 排查和移除
 
-### 运行 `codex-notify` 没有进入 TUI
-
-无参数启动仅在 stdin 和 stdout 都是交互终端时进入 TUI。请在本机终端运行 `codex-notify ui`；CI 或管道环境使用子命令。
-
-### 保存后没有收到通知
-
-先运行 `codex-notify status`，确认 EXE 为当前版本且 `Codex Stop Hook` 已配置；新开 Codex 会话并运行 `/hooks` 确认 Hook 已信任。然后用上面的 `notify` 命令测试渠道地址。Telegram 必须同时配置 Bot Token 和 Chat ID，Bark 必须填写完整 POST 地址。
-
-### SubAgent 仍然发送通知
-
-运行 `codex-notify status`。仅主代理模式下不应显示 `SubagentStop Hook`；如果仍显示，进入 TUI 将通知范围切为“仅主代理”并保存。若 EXE 显示“需要更新”，重新执行“安装 / 更新”。不要继续使用旧的顶层 `notify`，因为官方 `notify` payload 没有稳定的主代理/SubAgent 身份字段。
-
-### 想移除通知 Hook
-
-运行 `codex-notify uninstall`。工具只会移除自己的 Hook 和旧 `notify`；第三方配置会保留。
+- 收不到通知时，先在新 Codex 会话的 `/hooks` 检查插件 Hook 的信任状态，再检查渠道配置。Telegram 必须同时填写 Bot Token 和 Chat ID，Bark 需要完整的 POST 地址。
+- 如果只需要主代理通知，把配置里的 `ignore_subagent_notifications` 设为 `true`。
+- 可在 Codex 插件设置中移除，或运行 `codex plugin remove codex-notify@codex-notify`。
 
 ## 开发
 
@@ -225,16 +123,16 @@ npm test
 
 ## 自动发布
 
-推送 `vMAJOR.MINOR.PATCH` tag，或手动运行 `release` workflow 并输入版本，会构建 Windows、Linux、macOS 的 x64/ARM64 六个平台，创建 GitHub Release，并发布六个平台包、兼容包 `@asural/codex-notify` 和主包 `go-codex-notify`。
+推送 `vMAJOR.MINOR.PATCH` 标签会为 Windows、Linux、macOS 的 x64 和 ARM64 构建二进制文件。发布流程把它们装入 `@asural/codex-notify`，并在 GitHub 创建版本说明。
 
-发布使用 npm Trusted Publishing（GitHub OIDC），不需要长期 `NPM_TOKEN`。npm 上的八个包都必须配置同一个 Trusted Publisher：
+npm 插件包使用 GitHub OIDC 受信任发布。
 
 - GitHub organization/user：`luodaoyi`
 - Repository：`go-codex-notify`
 - Workflow filename：`release.yml`
 - Environment：留空
 
-workflow 已声明 `id-token: write` 和 `contents: write`，并通过 `npm publish --provenance` 发布。已存在的同版本包会自动跳过。
+workflow 已声明 `id-token: write` 和 `contents: write`，并通过 `npm publish --provenance` 发布插件包。已存在的同版本包会自动跳过。
 
 ## 许可证
 
