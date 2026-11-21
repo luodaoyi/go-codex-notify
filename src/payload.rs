@@ -4,6 +4,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use pulldown_cmark::{Event, Parser, Tag};
 use serde_json::{Map, Value};
 
 #[derive(Clone, Debug, Default)]
@@ -181,7 +182,10 @@ fn clean_strings(values: Vec<String>) -> Vec<String> {
 
 pub fn build_message(payload: &NotifyPayload) -> String {
     let (user_input, response) = message_parts(payload);
-    let mut lines = Vec::with_capacity(2);
+    let mut lines = Vec::with_capacity(3);
+    if payload.is_turn_update() && (!user_input.is_empty() || !response.is_empty()) {
+        lines.push(notification_title(payload));
+    }
     push_field(&mut lines, "用户输入", &user_input);
     push_field(&mut lines, "Codex 回应", &response);
     lines.join("\n")
@@ -201,7 +205,10 @@ pub fn build_bark_markdown(payload: &NotifyPayload) -> String {
 
 pub fn build_telegram_markdown_v2(payload: &NotifyPayload) -> String {
     let (user_input, response) = message_parts(payload);
-    let mut sections = Vec::with_capacity(2);
+    let mut sections = Vec::with_capacity(3);
+    if payload.is_turn_update() && (!user_input.is_empty() || !response.is_empty()) {
+        sections.push(format!("*{}*", notification_title(payload)));
+    }
     if !user_input.is_empty() {
         sections.push(format!(
             "*用户输入*\n{}",
@@ -219,15 +226,58 @@ pub fn build_telegram_markdown_v2(payload: &NotifyPayload) -> String {
 
 fn message_parts(payload: &NotifyPayload) -> (String, String) {
     let user_input = format_input_messages(&payload.input_messages);
-    let mut response = if payload.last_assistant_message.is_empty() {
-        payload.message.clone()
+    let mut response = visible_response(if payload.last_assistant_message.is_empty() {
+        &payload.message
     } else {
-        payload.last_assistant_message.clone()
-    };
-    if user_input.is_empty() && response.is_empty() {
+        &payload.last_assistant_message
+    });
+    if user_input.is_empty() && response.is_empty() && !payload.is_turn_update() {
         response = "任务已完成".to_owned();
     }
     (user_input, response)
+}
+
+fn visible_response(text: &str) -> String {
+    if !text.contains(":codex-annotation{") {
+        return text.trim().to_owned();
+    }
+
+    let mut code_blocks = Parser::new(text)
+        .into_offset_iter()
+        .filter_map(|(event, range)| {
+            matches!(event, Event::Start(Tag::CodeBlock(_))).then_some(range)
+        })
+        .peekable();
+    let mut result = String::new();
+    let mut offset = 0;
+    for line in text.split_inclusive('\n') {
+        while code_blocks.peek().is_some_and(|range| range.end <= offset) {
+            code_blocks.next();
+        }
+        let in_code = code_blocks
+            .peek()
+            .is_some_and(|range| range.start < offset + line.len());
+        let annotation = line
+            .trim()
+            .strip_prefix(":codex-annotation{")
+            .and_then(|attributes| attributes.strip_suffix('}'))
+            .is_some_and(|attributes| {
+                attributes.starts_with("index=") && attributes.contains(" id=")
+            });
+        if in_code || !annotation {
+            result.push_str(line);
+        }
+        offset += line.len();
+    }
+    result.trim().to_owned()
+}
+
+fn is_visible_user_text(text: &str) -> bool {
+    let text = text.trim();
+    !text.is_empty()
+        && !text.starts_with("<send_user_message_question_reply>")
+        && !text.starts_with("<goal_context>")
+        && !text.starts_with("<codex_internal_context ")
 }
 
 fn push_field(lines: &mut Vec<String>, name: &str, value: &str) {
@@ -240,14 +290,19 @@ fn format_input_messages(messages: &[String]) -> String {
     const MAX_MESSAGES: usize = 3;
     const MAX_CHARS: usize = 500;
 
-    let mut result = messages
+    let visible: Vec<_> = messages
+        .iter()
+        .map(String::as_str)
+        .filter(|text| is_visible_user_text(text))
+        .collect();
+    let mut result = visible
         .iter()
         .take(MAX_MESSAGES)
-        .map(String::as_str)
+        .copied()
         .collect::<Vec<_>>()
         .join(" / ");
-    if messages.len() > MAX_MESSAGES {
-        result.push_str(&format!(" / ...(+{})", messages.len() - MAX_MESSAGES));
+    if visible.len() > MAX_MESSAGES {
+        result.push_str(&format!(" / ...(+{})", visible.len() - MAX_MESSAGES));
     }
     truncate_chars(&result, MAX_CHARS)
 }
@@ -268,19 +323,19 @@ pub fn notification_headline(payload: &NotifyPayload) -> String {
     )
     .to_lowercase();
 
-    if payload.hook_event_name.eq_ignore_ascii_case("stop")
-        || payload.event.eq_ignore_ascii_case("stop")
-        || contains_any(
-            &event_text,
-            &[
-                "turn-complete",
-                "turn_complete",
-                "completed",
-                "finished",
-                "done",
-            ],
-        )
-    {
+    if payload.is_turn_update() {
+        return "父亲，Codex 本轮更新。".into();
+    }
+    if contains_any(
+        &event_text,
+        &[
+            "turn-complete",
+            "turn_complete",
+            "completed",
+            "finished",
+            "done",
+        ],
+    ) {
         return "父亲，Codex 任务已完成。".into();
     }
     if contains_any(
@@ -327,6 +382,21 @@ fn contains_any(value: &str, needles: &[&str]) -> bool {
 }
 
 impl NotifyPayload {
+    fn is_turn_update(&self) -> bool {
+        ["Stop", "SubagentStop"]
+            .iter()
+            .any(|event| self.hook_event_name.eq_ignore_ascii_case(event))
+            || [
+                "Stop",
+                "SubagentStop",
+                "agent-turn-complete",
+                "turn-complete",
+                "turn_complete",
+            ]
+            .iter()
+            .any(|event| self.event.eq_ignore_ascii_case(event))
+    }
+
     pub fn is_subagent(&self) -> bool {
         if self.hook_event_name.eq_ignore_ascii_case("SubagentStop")
             || self.event.eq_ignore_ascii_case("SubagentStop")
@@ -385,40 +455,54 @@ fn value_is_true(value: &Value) -> bool {
 }
 
 pub fn enrich_user_input_from_transcript(payload: &mut NotifyPayload) {
-    if !payload.input_messages.is_empty() {
+    payload
+        .input_messages
+        .retain(|message| is_visible_user_text(message));
+    if !payload.input_messages.is_empty() || payload.turn_id.is_empty() {
         return;
     }
-    let path = payload.transcript_path.trim();
-    if path.is_empty() {
-        return;
-    }
-    let Ok(content) = fs::read_to_string(path) else {
+    let Ok(content) = fs::read_to_string(payload.transcript_path.trim()) else {
         return;
     };
+    let mut in_turn = false;
+    let mut user_event = None;
+    let mut user_item = None;
 
-    for line in content
-        .lines()
-        .rev()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-    {
+    for line in content.lines() {
         let Ok(value) = serde_json::from_str::<Value>(line) else {
             continue;
         };
-        if let Some(message) = transcript_user_message(&value) {
-            payload.input_messages.push(message);
-            break;
+        let Some(entry) = value.get("payload").and_then(Value::as_object) else {
+            continue;
+        };
+        let kind = entry.get("type").and_then(Value::as_str);
+        if matches!(kind, Some("task_started" | "turn_started")) {
+            if in_turn {
+                break;
+            }
+            in_turn =
+                entry.get("turn_id").and_then(Value::as_str) == Some(payload.turn_id.as_str());
+        } else if in_turn {
+            if matches!(kind, Some("task_complete" | "turn_complete")) {
+                break;
+            }
+            if let Some(message) = transcript_user_message(entry) {
+                if kind == Some("user_message") {
+                    user_event = Some(message);
+                } else {
+                    user_item = Some(message);
+                }
+            }
         }
     }
+    payload.input_messages.extend(user_event.or(user_item));
 }
 
-fn transcript_user_message(value: &Value) -> Option<String> {
-    let raw = value.as_object()?;
-    let entry = raw.get("payload").and_then(Value::as_object).unwrap_or(raw);
+fn transcript_user_message(entry: &Map<String, Value>) -> Option<String> {
     let entry_type = first_string(entry, &["type"]);
     if entry_type == "user_message" {
         let message = first_string(entry, &["message", "text"]);
-        return (!message.is_empty()).then_some(message);
+        return is_visible_user_text(&message).then_some(message);
     }
     if entry_type != "message" || !first_string(entry, &["role"]).eq_ignore_ascii_case("user") {
         return None;
@@ -430,7 +514,7 @@ fn transcript_user_message(value: &Value) -> Option<String> {
         .filter_map(Value::as_object)
         .filter(|part| first_string(part, &["type"]) == "input_text")
         .map(|part| first_string(part, &["text"]))
-        .filter(|text| !text.is_empty())
+        .filter(|text| is_visible_user_text(text))
         .collect::<Vec<_>>()
         .join("\n");
     (!message.is_empty()).then_some(message)
@@ -474,7 +558,7 @@ mod tests {
         let message = build_message(&complete);
         assert_eq!(
             message,
-            "用户输入：修复 Bark 通知 / 确认 TUI\nCodex 回应：已完成"
+            "Codex 本轮更新\n用户输入：修复 Bark 通知 / 确认 TUI\nCodex 回应：已完成"
         );
         assert!(!message.contains("thread-123"));
         assert_eq!(
@@ -505,27 +589,51 @@ mod tests {
     }
 
     #[test]
-    fn reads_latest_user_input_from_codex_transcript() {
-        let mut file = NamedTempFile::new().unwrap();
-        writeln!(
-            file,
-            r#"{{"type":"event_msg","payload":{{"type":"user_message","message":"旧问题"}}}}"#
-        )
-        .unwrap();
-        writeln!(file, r#"{{"type":"response_item","payload":{{"type":"message","role":"user","content":[{{"type":"input_text","text":"修复通知正文"}}]}}}}"#).unwrap();
-
+    fn reads_latest_user_input_from_codex_transcript() -> Result<()> {
+        let mut file = NamedTempFile::new()?;
+        for entry in [
+            serde_json::json!({"type":"user_message","message":"旧问题"}),
+            serde_json::json!({"type":"task_started","turn_id":"current"}),
+            serde_json::json!({"type":"user_message","message":"修复通知正文"}),
+            serde_json::json!({"type":"message","role":"user","content":[{"type":"input_text","text":"<send_user_message_question_reply>synthetic answer</send_user_message_question_reply>"}]}),
+            serde_json::json!({"type":"task_started","turn_id":"next"}),
+            serde_json::json!({"type":"user_message","message":"下一轮"}),
+        ] {
+            writeln!(file, "{}", serde_json::json!({"payload":entry}))?;
+        }
         let mut payload = NotifyPayload {
+            hook_event_name: "Stop".into(),
+            turn_id: "current".into(),
             transcript_path: file.path().to_string_lossy().into_owned(),
-            last_assistant_message: "已只保留可读内容".into(),
+            last_assistant_message: ":codex-annotation{index=\"1\" id=\"ui\"}\n\n已只保留可读内容"
+                .into(),
             ..NotifyPayload::default()
         };
         enrich_user_input_from_transcript(&mut payload);
-
         assert_eq!(payload.input_messages, ["修复通知正文"]);
         assert_eq!(
             build_message(&payload),
-            "用户输入：修复通知正文\nCodex 回应：已只保留可读内容"
+            "Codex 本轮更新\n用户输入：修复通知正文\nCodex 回应：已只保留可读内容"
         );
+        payload.turn_id = "missing-turn".into();
+        payload.input_messages = vec![
+            "<send_user_message_question_reply>synthetic answer</send_user_message_question_reply>".into(),
+            "<codex_internal_context source=\"goal\">internal continuation</codex_internal_context>".into(),
+        ];
+        payload.last_assistant_message = concat!(
+            ":codex-annotation{index=\"1\" id=\"ui\"}\n\n",
+            "```json\n{\"status\":\"active\"}\n```",
+        )
+        .into();
+        enrich_user_input_from_transcript(&mut payload);
+        assert!(payload.input_messages.is_empty());
+        assert_eq!(
+            build_message(&payload),
+            "Codex 本轮更新\nCodex 回应：```json\n{\"status\":\"active\"}\n```"
+        );
+        payload.last_assistant_message.clear();
+        assert!(build_message(&payload).is_empty());
+        Ok(())
     }
 
     #[test]

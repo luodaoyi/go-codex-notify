@@ -20,7 +20,7 @@ const TARGETS = {
     const args = process.argv.slice(2);
     const result = spawnSync(binary, args, interactive
       ? { stdio: 'inherit', env: process.env, windowsHide: true }
-      : args.length > 0
+      : args.length > 0 && !(args.length === 1 && args[0] === 'hook')
         ? { stdio: ['ignore', 'inherit', 'inherit'], env: process.env, windowsHide: true }
         : {
           input: readHookInput(),
@@ -49,6 +49,8 @@ function resolveBinary() {
     throw new Error(`unsupported platform: ${process.platform}:${process.arch}`);
   }
   const [packageName, executable] = target;
+  const bundledBinary = join(__dirname, 'native', process.platform + '-' + process.arch, executable);
+  if (existsSync(bundledBinary)) return bundledBinary;
   try {
     const packageRoot = dirname(require.resolve(`${packageName}/package.json`));
     const binary = join(packageRoot, 'bin', executable);

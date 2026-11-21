@@ -212,6 +212,10 @@ jobs:
             'win32-x64', 'win32-arm64', 'linux-x64',
             'linux-arm64', 'darwin-x64', 'darwin-arm64'
           ];
+          const pluginPath = '.codex-plugin/plugin.json';
+          const plugin = JSON.parse(fs.readFileSync(pluginPath, 'utf8'));
+          plugin.version = version;
+          fs.writeFileSync(pluginPath, JSON.stringify(plugin, null, 2) + '\n');
           const entryManifests = [
             'package.json',
             path.join('packages', 'go-codex-notify', 'package.json')
@@ -243,6 +247,10 @@ jobs:
           cp artifacts/darwin-x64/codex-notify-darwin-x64 packages/darwin-x64/bin/codex-notify
           cp artifacts/darwin-arm64/codex-notify-darwin-arm64 packages/darwin-arm64/bin/codex-notify
           chmod +x packages/linux-*/bin/codex-notify packages/darwin-*/bin/codex-notify
+          for directory in win32-x64 win32-arm64 linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
+            mkdir -p "bin/native/$directory"
+            cp -p "packages/$directory/bin/"* "bin/native/$directory/"
+          done
 
       - name: Stage top-level npm package
         shell: bash

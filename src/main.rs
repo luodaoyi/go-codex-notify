@@ -120,10 +120,16 @@ fn build_version() -> &'static str {
 fn run_notify(args: &[String], filter_legacy_subagent: bool) -> Result<()> {
     let config = Config::load()?;
     let (mut payload, _) = payload::read(args)?;
-    if filter_legacy_subagent && config.ignore_subagent_notifications && payload.is_subagent() {
+    if config.ignore_subagent_notifications
+        && (filter_legacy_subagent || payload.hook_event_name.eq_ignore_ascii_case("SubagentStop"))
+        && payload.is_subagent()
+    {
         return Ok(());
     }
     payload::enrich_user_input_from_transcript(&mut payload);
     let message = payload::build_message(&payload);
+    if message.is_empty() {
+        return Ok(());
+    }
     notify::send_all(&config, &message, &payload)
 }

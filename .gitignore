@@ -6,3 +6,4 @@ codex-notify
 codex-notify.exe
 codex-notify-*
 packages/*/bin/
+bin/native/

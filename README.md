@@ -157,9 +157,23 @@ codex-notify --version        显示版本
 codex-notify notify '{"type":"agent-turn-complete","last-assistant-message":"测试通知"}'
 ```
 
+## Codex 插件安装与更新
+
+插件和命令行版使用相同的渠道配置，插件内置各平台的通知程序。需要 Node.js 18 或以上版本，并确保 Codex 可以在 PATH 中找到 Node.js。请使用支持 npm 插件源的 Codex CLI，或在桌面客户端的插件设置中添加同一个市场。
+
+~~~sh
+codex plugin marketplace add luodaoyi/go-codex-notify
+codex plugin add codex-notify@codex-notify
+~~~
+
+- 已用旧版安装器注册 Hook 的用户，安装插件前先运行 `codex-notify uninstall` 移除旧 Hook，避免收到两份通知。原有渠道配置保留。
+- 首次使用时，按本页的渠道配置说明编辑 `~/.codex/codex-notify.json` 或设置环境变量。插件用户通过配置文件调整通知范围，`ignore_subagent_notifications` 设为 `true` 时只推送主代理。
+- 安装或升级后启动新的 Codex 会话，用 `/hooks` 检查并信任插件 Hook。通过 Codex 的插件市场更新功能安装后续版本，也可运行 `codex plugin marketplace upgrade codex-notify`。
+- 通知会把可见正文发送到你配置的外部渠道。插件使用本机 Hook，需要从本仓库的市场手动安装。
+
 ## 通知内容
 
-所有渠道的可见正文只包含“用户输入”和“Codex 回应”。Bark 使用原生 `markdown` 字段发送并保留正文中的基础 Markdown；Telegram 会把 Codex 输出的 CommonMark 转换为 `MarkdownV2`，支持标题、列表、链接、粗体、斜体、删除线、引用、行内代码和代码块，并自动转义普通文本中的特殊字符。
+所有渠道都展示“用户输入”和“Codex 回应”中本轮可用的内容。轮次结束时显示“Codex 本轮更新”，本轮没有可见内容时跳过通知。Bark 使用原生 `markdown` 字段发送并保留正文中的基础 Markdown；Telegram 会把 Codex 输出的 CommonMark 转换为 `MarkdownV2`，支持标题、列表、链接、粗体、斜体、删除线、引用、行内代码和代码块，并自动转义普通文本中的特殊字符。
 
 ```markdown
 **用户输入**
@@ -173,7 +187,7 @@ codex-notify notify '{"type":"agent-turn-complete","last-assistant-message":"测
 <本轮最终回应>
 ```
 
-会话 ID、轮次 ID、工作目录、模型、权限模式和 transcript 路径不会进入通知，也不会作为 Hermes 的额外字段发送。Codex `Stop` Hook 没有直接提供用户输入时，程序会从 Hook 给出的 transcript 中读取本轮最后一条用户消息。
+会话 ID、轮次 ID、工作目录、模型、权限模式和 transcript 路径不会进入通知，也不会作为 Hermes 的额外字段发送。Codex `Stop` Hook 没有直接提供用户输入时，程序会用 Hook 的轮次 ID 在 transcript 里查找本轮用户消息。交互工具回复、内部 Goal 指令和独立的界面注解会被过滤。
 
 ## Hook 与 Hermes 兼容
 

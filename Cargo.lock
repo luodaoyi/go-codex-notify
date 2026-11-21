@@ -103,7 +103,7 @@ dependencies = [
 
 [[package]]
 name = "codex-notify"
-version = "1.3.23"
+version = "1.3.24"
 dependencies = [
  "anyhow",
  "base64",

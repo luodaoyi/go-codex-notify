@@ -1,0 +1,21 @@
+{
+  "name": "codex-notify",
+  "interface": {
+    "displayName": "Codex Notify"
+  },
+  "plugins": [
+    {
+      "name": "codex-notify",
+      "source": {
+        "source": "npm",
+        "package": "@asural/codex-notify",
+        "version": "latest"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

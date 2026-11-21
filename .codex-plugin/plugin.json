@@ -1,0 +1,13 @@
+{
+  "name": "codex-notify",
+  "version": "1.3.24",
+  "description": "Send Codex updates to Telegram, Bark, OpeniLink, or Hermes",
+  "repository": "https://github.com/luodaoyi/go-codex-notify",
+  "license": "MIT",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "Codex Notify",
+    "shortDescription": "Send readable Codex updates to your notification channels",
+    "category": "Productivity"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"process.argv.push('', 'hook'); require(require('node:path').join(process.env.PLUGIN_ROOT, 'bin', 'cli.js'))\"",
+            "timeout": 60,
+            "async": true,
+            "statusMessage": "Sending Codex update"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"process.argv.push('', 'hook'); require(require('node:path').join(process.env.PLUGIN_ROOT, 'bin', 'cli.js'))\"",
+            "timeout": 60,
+            "async": true,
+            "statusMessage": "Sending Codex update"
+          }
+        ]
+      }
+    ]
+  }
+}
