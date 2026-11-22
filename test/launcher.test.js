@@ -7,7 +7,7 @@ const root = join(__dirname, '..');
 const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
 const plugin = JSON.parse(readFileSync(join(root, '.codex-plugin', 'plugin.json'), 'utf8'));
 assert.equal(plugin.version, manifest.version);
-assert.equal(manifest.bin, undefined);
+assert.deepEqual(manifest.bin, { "codex-notify-settings": "bin/settings.js" });
 assert.equal(manifest.optionalDependencies, undefined);
 
 const targetRoot = resolve(root, process.env.CARGO_TARGET_DIR || 'target');
@@ -20,6 +20,7 @@ try {
   const native = join(bin, 'native', process.platform + '-' + process.arch);
   mkdirSync(native, { recursive: true });
   copyFileSync(join(root, 'bin', 'hook.js'), launcher);
+  copyFileSync(join(root, 'bin', 'native.js'), join(bin, 'native.js'));
   copyFileSync(binary, join(native, executable));
   const env = {
     ...process.env,
@@ -36,7 +37,7 @@ try {
   const payload = JSON.stringify({
     hook_event_name: 'Stop',
     turn_id: 'stdin-forwarding-test',
-    last_assistant_message: 'OK',
+    last_assistant_message: '',
   });
   const result = spawnSync(process.execPath, [launcher], { cwd: fixture, input: payload, encoding: 'utf8', env });
   assert.equal(result.status, 0, result.stderr);

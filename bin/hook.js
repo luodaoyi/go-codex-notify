@@ -1,11 +1,8 @@
 const { spawnSync } = require('node:child_process');
 const { readFileSync } = require('node:fs');
-const { join } = require('node:path');
+const binary = require('./native.js');
 
 try {
-  const { platform, arch } = process;
-  const executable = platform === 'win32' ? 'codex-notify.exe' : 'codex-notify';
-  const binary = join(__dirname, 'native', platform + '-' + arch, executable);
   const result = spawnSync(binary, ['hook'], {
     input: readFileSync(0),
     stdio: ['pipe', 'inherit', 'inherit'],

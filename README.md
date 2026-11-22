@@ -11,7 +11,7 @@ codex plugin marketplace add luodaoyi/go-codex-notify
 codex plugin add codex-notify@codex-notify
 ~~~
 
-配置渠道后，启动新的 Codex 会话，在 `/hooks` 中检查并信任插件的 `Stop` 和 `SubagentStop`。通知正文会发送到配置的外部渠道。
+在下面的本地设置页保存渠道后，启动新的 Codex 会话，在 `/hooks` 中检查并信任插件的 `Stop` 和 `SubagentStop`。通知正文会发送到配置的外部渠道。
 
 ### 从旧版迁移
 
@@ -21,7 +21,29 @@ codex plugin add codex-notify@codex-notify
 npm exec --yes --package=go-codex-notify@1.3.24 -- codex-notify uninstall
 ~~~
 
-该命令移除旧版写入的 Hook 和 `notify` 项。原有渠道配置 `~/.codex/codex-notify.json` 会继续用于插件。
+该命令移除旧版写入的 Hook 和 `notify` 项。保留旧渠道配置，首次打开本地设置页后用「导入旧配置」迁移。
+
+#### 交给 Codex 的迁移提示词
+
+复制下面这段到需要升级的机器上的 Codex 会话。
+
+~~~text
+请把当前机器的旧版 go-codex-notify 迁移到 Codex Notify 插件，并验证安装结果。
+
+1. 检查当前 Codex 使用的配置目录、旧版安装来源及 Hook 的命令归属。保留已有的 codex-notify.json、CODEX_NOTIFY_CONFIG 指向的文件、渠道环境变量及其他工具的配置。检查和汇报时只说明配置是否存在，不回显 Key、Token 或带密钥的 URL。
+2. 确认 Codex 能在 PATH 中找到 Node.js 18 或以上版本。首次安装时运行：
+   codex plugin marketplace add luodaoyi/go-codex-notify
+   codex plugin add codex-notify@codex-notify
+   如果已装插件，运行 codex plugin marketplace upgrade codex-notify。确认插件版本至少为 1.3.26。
+3. 在信任新 Hook 前，运行旧版的 codex-notify uninstall。旧命令不可用时，运行：
+   npm exec --yes --package=go-codex-notify@1.3.24 -- codex-notify uninstall
+   再用原包管理器卸载已确认的旧全局包，并仅在确认归属后清理旧安装器复制的程序。遇到 config.toml 顶层的 notify，先确认它确实调用旧 Codex Notify。其他工具的 notify 需要保留。
+4. 在与 Codex 相同的用户和 CODEX_HOME 下，运行：
+   npm exec --yes --package=@asural/codex-notify@latest -- codex-notify-settings
+   请用户在本机浏览器打开终端生成的链接，并点击「导入旧配置」。如果插件已有设置，核对页面中的渠道即可。缺少旧配置时，请用户直接在页面填写 URL 和 Key。不要在对话里索取或转发设置链接、URL 或密钥。
+5. 新开 Codex 会话，在 /hooks 中检查 Codex Notify 的 Stop 和 SubagentStop。按当前环境的授权流程信任这两项。
+6. 汇报插件版本、旧 Hook 是否已移除、设置是否已导入、新 Hook 是否已信任。向真实渠道发测试消息前先取得授权，并说明实际完成了哪些验证。
+~~~
 
 ### 更新
 
@@ -31,57 +53,28 @@ npm exec --yes --package=go-codex-notify@1.3.24 -- codex-notify uninstall
 codex plugin marketplace upgrade codex-notify
 ~~~
 
-## 通知渠道
+## 本地设置页
 
-| 渠道 | 配置 | 说明 |
-| --- | --- | --- |
-| Telegram | `TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID` | 两项都填写后才会启用 |
-| Bark | `BARK_SERVER_URL` | 完整的 HTTP POST 地址，例如 Bark 服务地址加设备 key |
-| Hermes Webhook | `HERMES_WEBHOOK_URL` | 可选 `HERMES_WEBHOOK_SECRET` 用于 HMAC-SHA256 签名 |
-| OpeniLink Hub | `OPENILINK_HUB_URL`、`OPENILINK_HUB_TOKEN` | Token 作为 Bearer Token 发送 |
+在运行 Codex 的同一台机器、同一系统用户和同一 `CODEX_HOME` 下打开终端，运行：
 
-空配置不会启用对应渠道。
+~~~sh
+npm exec --yes --package=@asural/codex-notify@latest -- codex-notify-settings
+~~~
 
-### JSON 配置
+在本机浏览器打开终端生成的 `127.0.0.1` 链接，填写要使用的渠道并保存。链接包含本次设置会话的访问凭据，请勿分享。完成后按 `Ctrl+C` 关闭设置服务。清空某渠道的字段再保存可停用该渠道。
 
-默认路径是 `~/.codex/codex-notify.json`。示例：
+| 渠道 | 设置项 |
+| --- | --- |
+| Telegram | Bot Token、Chat ID |
+| Bark | 完整推送 URL，包含设备 Key |
+| Hermes Webhook | Webhook URL、可选的签名密钥 |
+| OpeniLink Hub | Hub URL、Hub Token |
 
-```json
-{
-  "bot_token": "123456:ABC...",
-  "chat_id": "-1001234567890",
-  "openilink_hub_url": "https://hub.example.com/api/notify",
-  "openilink_hub_token": "openilink-token",
-  "hermes_webhook_url": "https://hooks.example.com/codex",
-  "hermes_webhook_secret": "optional-signing-secret",
-  "bark_server_url": "https://bark.example.com/device-key",
-  "ignore_subagent_notifications": true
-}
-```
+勾选「只推送主代理通知」可关闭子代理通知。
 
-只保留实际使用的字段即可。不要将包含 Token 的配置文件提交到 Git。
+设置保存在 Windows 凭据管理器、macOS 钥匙串或 Linux Secret Service 中。Linux 需要可访问且已解锁的 Secret Service 会话。自定义 `CODEX_HOME` 的设置与默认配置目录分开保存。Windows 凭据库会拒绝超过单条凭据容量的配置，页面会显示错误。
 
-可用 `CODEX_NOTIFY_CONFIG` 指定其它配置文件。通过环境变量配置时，请把变量设置在启动 Codex 的环境里。
-
-### 环境变量
-
-所有渠道都可以只用环境变量配置。非空环境变量优先于 JSON 文件中的同名配置：
-
-```powershell
-$env:TELEGRAM_BOT_TOKEN = '123456:ABC...'
-$env:TELEGRAM_CHAT_ID = '-1001234567890'
-$env:BARK_SERVER_URL = 'https://bark.example.com/device-key'
-$env:HERMES_WEBHOOK_URL = 'https://hooks.example.com/codex'
-```
-
-```bash
-export TELEGRAM_BOT_TOKEN='123456:ABC...'
-export TELEGRAM_CHAT_ID='-1001234567890'
-export BARK_SERVER_URL='https://bark.example.com/device-key'
-export HERMES_WEBHOOK_URL='https://hooks.example.com/codex'
-```
-
-`ignore_subagent_notifications` 默认为 `false`。设为 `true` 时只发主代理通知。
+首次配置时可点击「导入旧配置」。导入会一次性读取旧 `~/.codex/codex-notify.json` 或 `CODEX_NOTIFY_CONFIG` 指定的文件，并采用设置进程中非空的旧渠道环境变量覆盖同名值。导入保留旧文件。保存或导入后，Hook 只从系统凭据库读取渠道设置，后续修改通过此页面完成。尚未保存设置时，Hook 会提示先打开设置页。
 
 ## 通知内容
 
@@ -103,12 +96,12 @@ export HERMES_WEBHOOK_URL='https://hooks.example.com/codex'
 
 ## Hermes Webhook
 
-Hermes 请求只包含 `event_type: "codex_notify"` 和上述 `message`。设置 `HERMES_WEBHOOK_SECRET` 后会发送小写十六进制的 `X-Webhook-Signature`（HMAC-SHA256）。
+Hermes 请求只包含 `event_type: "codex_notify"` 和上述 `message`。填写 Hermes 签名密钥后会发送小写十六进制的 `X-Webhook-Signature`（HMAC-SHA256）。
 
 ## 排查和移除
 
 - 收不到通知时，先在新 Codex 会话的 `/hooks` 检查插件 Hook 的信任状态，再检查渠道配置。Telegram 必须同时填写 Bot Token 和 Chat ID，Bark 需要完整的 POST 地址。
-- 如果只需要主代理通知，把配置里的 `ignore_subagent_notifications` 设为 `true`。
+- 如果只需要主代理通知，在设置页勾选「只推送主代理通知」。
 - 可在 Codex 插件设置中移除，或运行 `codex plugin remove codex-notify@codex-notify`。
 
 ## 开发

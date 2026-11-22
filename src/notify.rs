@@ -179,11 +179,11 @@ fn post_json(
         .headers(headers)
         .body(body)
         .send()
+        .map_err(reqwest::Error::without_url)
         .with_context(|| format!("请求 {provider} 失败"))?;
     let status = response.status();
-    let response_body = response.text().unwrap_or_default();
     if !status.is_success() {
-        return Err(anyhow!("{provider} {status}: {}", response_body.trim()));
+        return Err(anyhow!("{provider} {status}"));
     }
     Ok(())
 }

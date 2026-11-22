@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Codex Notify 设置</title>
+<style>
+:root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+body { max-width: 54rem; margin: 3rem auto; padding: 0 1.25rem; }
+h1 { margin-bottom: .5rem; }
+p { line-height: 1.55; }
+#settings { border: 0; margin: 1.5rem 0; padding: 0; min-width: 0; }
+.channels { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); gap: 1rem; }
+.channel { border: 1px solid #8887; border-radius: .65rem; padding: 1rem; min-width: 0; margin: 0; }
+legend { font-weight: 650; padding: 0 .35rem; }
+label { display: block; margin-bottom: .85rem; }
+label:last-child { margin-bottom: 0; }
+input:not([type=checkbox]) { box-sizing: border-box; width: 100%; padding: .55rem; border: 1px solid #8889; border-radius: .3rem; margin-top: .3rem; font: inherit; }
+.scope { margin-top: 1.25rem; }
+button { border: 1px solid #8889; border-radius: .4rem; padding: .55rem .9rem; font: inherit; margin-right: .4rem; cursor: pointer; }
+button[type=submit] { background: #254ace; color: white; border-color: #254ace; }
+:focus-visible { outline: 2px solid #6484fc; outline-offset: 3px; }
+#status { min-height: 1.55em; }
+</style>
+<script src="/settings-page.js" defer></script>
+</head>
+<body>
+<main>
+<h1>Codex Notify 设置</h1>
+<p>填写要使用的通知渠道。清空该渠道字段并保存可停用。设置保存在本机系统凭据库。</p>
+<form autocomplete="off">
+<fieldset id="settings" disabled>
+<div class="channels">
+<fieldset class="channel">
+<legend>Telegram</legend>
+<label>Bot Token<input name="bot_token" type="password" autocomplete="new-password" spellcheck="false"></label>
+<label>Chat ID<input name="chat_id" spellcheck="false"></label>
+</fieldset>
+<fieldset class="channel">
+<legend>Bark</legend>
+<label>完整推送 URL<input name="bark_server_url" type="password" autocomplete="new-password" spellcheck="false"></label>
+</fieldset>
+<fieldset class="channel">
+<legend>OpeniLink Hub</legend>
+<label>Hub URL<input name="openilink_hub_url" type="password" autocomplete="new-password" spellcheck="false"></label>
+<label>Hub Token<input name="openilink_hub_token" type="password" autocomplete="new-password" spellcheck="false"></label>
+</fieldset>
+<fieldset class="channel">
+<legend>Hermes Webhook</legend>
+<label>Webhook URL<input name="hermes_webhook_url" type="password" autocomplete="new-password" spellcheck="false"></label>
+<label>签名密钥（可选）<input name="hermes_webhook_secret" type="password" autocomplete="new-password" spellcheck="false"></label>
+</fieldset>
+</div>
+<label class="scope"><input name="ignore_subagent_notifications" type="checkbox"> 只推送主代理通知</label>
+<button type="submit">保存设置</button>
+<button type="button" id="import" hidden>导入旧配置</button>
+</fieldset>
+</form>
+<p id="status" role="status">正在读取设置…</p>
+</main>
+</body>
+</html>

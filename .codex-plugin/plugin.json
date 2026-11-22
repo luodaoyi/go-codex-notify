@@ -1,6 +1,6 @@
 {
   "name": "codex-notify",
-  "version": "1.3.25",
+  "version": "1.3.26",
   "description": "Send Codex updates to Telegram, Bark, OpeniLink, or Hermes",
   "repository": "https://github.com/luodaoyi/go-codex-notify",
   "license": "MIT",
